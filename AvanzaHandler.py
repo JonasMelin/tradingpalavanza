@@ -5,6 +5,7 @@ from avanza import Avanza, OrderType
 
 class AvanzaHandler:
 
+    STUB_BUY = True
     allowedAcconts = ['Jonas KF', 'Jonas ISK']
 
     # ##############################################################################################################
@@ -107,6 +108,14 @@ class AvanzaHandler:
     def placeOrder(self, yahooTicker: str, accountId: str, tickerId: str, orderType: OrderType, price: float, volume: int):
         print(f"placing order... {yahooTicker}/{self.yahooTickerToAvanzaTicker(yahooTicker)}, accountId: {accountId}, tickerId: {tickerId}, {orderType}, price: {price}, volume: {volume}")
 
+        if self.STUB_BUY:
+            return {
+                "messages": [],
+                "orderId": "1234",
+                "requestId": "3241",
+                "status": "OK"
+            }
+
         result = self.avanza.place_order(
             account_id=accountId,
             order_book_id=tickerId,
@@ -115,7 +124,6 @@ class AvanzaHandler:
             valid_until=datetime.date.fromisoformat(self.generateOrderValidDate()),
             volume = volume)
 
-        print(result)
         return result
 
     # ##############################################################################################################
@@ -160,6 +168,9 @@ class AvanzaHandler:
         if flagCode.lower() == 'to':
             flagCode = 'CA'
 
+        if flagCode.lower() == 'ol':
+            flagCode = 'NO'
+
         return tickerPart, flagCode
 
 # ##############################################################################################################
@@ -170,7 +181,7 @@ if __name__ == "__main__":
     stocksBuyer = AvanzaHandler()
     stocksBuyer.testAvanzaConnection()
 
-    id = stocksBuyer.tickerToId("TUI1.DE")
+    id = stocksBuyer.tickerToId("AKSO.OL")
     tickerDetails = stocksBuyer.getTickerDetails(id)
     orderDetails = stocksBuyer.getOrderDetails("")
 
