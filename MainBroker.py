@@ -8,6 +8,7 @@ SELL_PATH = "getStocksToSell"
 # If price quota differs more than this the higher/lower bid will not be used.
 MAX_DEVIATE_PRICE = 1.03
 MAX_SANITY_QUOTA_SELL_BUY = 1.12
+MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 60
 
 class MainBroker:
 
@@ -51,6 +52,9 @@ class MainBroker:
                 expectedCountWhenDone = countAtStart - numberToBuy
                 buyPrice = self.getStockBuyPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
                 newTotalCount = self.buyOneStockUntilDone(countAtStart, expectedCountWhenDone, yahooTicker, avanzaDetails['accountId'], tickerId, buyPrice, numberToBuy)
+                if newTotalCount != countAtStart:
+                    print(f"Updating backend with new data...")
+                    #update backend
 
             except Exception as ex:
                 print(f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
@@ -68,16 +72,18 @@ class MainBroker:
         WAIT_SEC_FOR_COMPLETION = 5
 
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, OrderType.BUY, price, volume)
+        time.sleep(1)
 
-        if retVal['status'] != "OK":
+        if retVal['status'] != "SUCCESS":
+            self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
             raise RuntimeError(f"{yahooTicker}: Could not place order towards avanza, {retVal}, accountId {accountId}, price: {price}, volume {volume}")
 
         for a in range(WAIT_SEC_FOR_COMPLETION):
-            time.sleep(1)
             avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
             if avanzaDetails['currentCount'] == expectedWhenDone:
                 print(f"Stock successfully bought {yahooTicker}, volume {volume}")
                 return avanzaDetails['currentCount']
+            time.sleep(1)
 
         print(f"{yahooTicker} Failed to buy stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
 
@@ -85,9 +91,8 @@ class MainBroker:
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
         except:
             print("Could not delete order... Ignoring")
-            pass
 
-        time.sleep(2)
+        time.sleep(1)
         avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
         if avanzaDetails['currentCount'] == expectedWhenDone:
@@ -132,7 +137,10 @@ class MainBroker:
             raise RuntimeError(f"buyPrice {buyPrice} is less than sellPrice {sellPrice}")
 
         if (sellPrice / buyPrice) > MAX_SANITY_QUOTA_SELL_BUY:
-            raise RuntimeError(f"{sellPrice}/{buyPrice} > {MAX_SANITY_QUOTA_SELL_BUY}. Not reasonable...")
+            raise RuntimeError(f"sell/buy price: {sellPrice}/{buyPrice} > {MAX_SANITY_QUOTA_SELL_BUY}. Not reasonable...")
+
+        if avanzaDetails['secondsSinceUpdated'] > MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC:
+            raise RuntimeError(f"Stock price was not updated. So, the market is probably closed...")
 
         # ToDo: ENABLE!!
         #if avanzaDetails['currentCount'] != tradingPalDetails['currentStock']['count']:
@@ -172,7 +180,6 @@ class MainBroker:
                     self.handleBuyStocks(stocksToBuy['list'])
             except Exception as ex:
                 print(f"Exception during buy, {ex}")
-
 
             try:
                 stocksToSell = self.fetchTickers(SELL_PATH)

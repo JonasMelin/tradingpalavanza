@@ -5,7 +5,7 @@ from avanza import Avanza, OrderType
 
 class AvanzaHandler:
 
-    STUB_BUY = True
+    STUB_BUY = False
     allowedAcconts = ['Jonas KF', 'Jonas ISK']
 
     # ##############################################################################################################
@@ -64,6 +64,16 @@ class AvanzaHandler:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
+    def secondsSinceDate(self, date: str):
+        now = datetime.datetime.now(pytz.timezone('Europe/Stockholm'))
+        date = date[:-2] + ":00"
+        dateAsDateTime = datetime.datetime.strptime(''.join(date.rsplit(':', 1)), '%Y-%m-%dT%H:%M:%S.%f%z')
+        diff = now - dateAsDateTime
+        return diff.seconds
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getTickerDetails(self, tickerId: str):
 
         if tickerId is None:
@@ -73,7 +83,8 @@ class AvanzaHandler:
             'buyPrice': float,
             'sellPrice': float,
             'accountId': str,
-            'currentCount': int
+            'currentCount': int,
+            'secondsSinceUpdated': int
         }
         try:
             data = self.avanza.get_stock_info(tickerId)
@@ -82,6 +93,7 @@ class AvanzaHandler:
             raise ex
 
         try:
+            retData['secondsSinceUpdated'] = self.secondsSinceDate(data['lastPriceUpdated'])
             retData['buyPrice'] = data['buyPrice']
             retData['sellPrice'] = data['sellPrice']
 
@@ -177,7 +189,6 @@ class AvanzaHandler:
 # ...
 # ##############################################################################################################
 if __name__ == "__main__":
-
     stocksBuyer = AvanzaHandler()
     stocksBuyer.testAvanzaConnection()
 
