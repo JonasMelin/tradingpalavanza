@@ -1,4 +1,4 @@
-import time, datetime, json, requests, AvanzaHandler, sys, pytz
+import time, datetime, json, requests, AvanzaHandler, sys, pytz, enum
 from avanza import OrderType
 
 BASEURL = "http://localhost:5000/tradingpal/"
@@ -18,6 +18,10 @@ MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 60
 MARKET_OPEN_HOUR = 9
 MARKET_CLOSE_HOUR = 23
 
+class TransactionType(enum.Enum):
+   Buy = 1
+   Sell = 2
+
 class MainBroker:
 
     # ##############################################################################################################
@@ -36,7 +40,7 @@ class MainBroker:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def handleBuyStocks(self, stocks):
+    def doStocksTransaction(self, stocks, transactionType: TransactionType):
         self.refreshAvanzaHandler()
 
         for stock in stocks:
@@ -46,7 +50,7 @@ class MainBroker:
                 yahooTicker = stock['tickerName']
                 lockKey = self.lockStock(yahooTicker)
 
-                print(f"---------- BUYING STOCK ----------- {stock['currentStock']['name']}/{yahooTicker} -------")
+                print(f"---------- TRANSACTING STOCK ----------- {stock['currentStock']['name']}/{yahooTicker} -------")
                 tickerId = self.avanzaHandler.tickerToId(yahooTicker)
                 avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
@@ -55,14 +59,27 @@ class MainBroker:
                     continue
 
                 self.sanityCheckStock(avanzaDetails, stock)
+
                 countAtStart = avanzaDetails['currentCount']
-                numberToBuy = stock["numberToBuy"]
-                expectedCountWhenDone = countAtStart - numberToBuy
-                buyPrice = self.getStockBuyPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
-                newTotalCount = self.buyOneStockUntilDone(countAtStart, expectedCountWhenDone, yahooTicker, avanzaDetails['accountId'], tickerId, buyPrice, numberToBuy)
+
+                if transactionType == TransactionType.Buy:
+                    numberToTransact = stock["numberToBuy"]
+                    expectedCountWhenDone = countAtStart - numberToTransact
+                    transactionPrice = self.getStockBuyPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
+                else:
+                    numberToTransact = stock["numberToSell"]
+                    expectedCountWhenDone = countAtStart + numberToTransact
+                    transactionPrice = self.getStockSellPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
+
+                newTotalCount = self.doOneTransactionAndCheckResult(transactionType, countAtStart, expectedCountWhenDone, yahooTicker, avanzaDetails['accountId'], tickerId, transactionPrice, numberToTransact)
+
                 if newTotalCount != countAtStart:
-                    newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + (newTotalCount - countAtStart) * buyPrice)
-                    self.updateStock(yahooTicker, buyPrice, None, newTotalCount, lockKey, stock['currentStock']['name'], newTotalInvestedSek)
+                    newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + (newTotalCount - countAtStart) * transactionPrice)
+                    self.updateStock(
+                        yahooTicker,
+                        transactionPrice if transactionType == TransactionType.Buy else None,
+                        transactionPrice if transactionType == TransactionType.Sell else None,
+                        newTotalCount, lockKey, stock['currentStock']['name'], newTotalInvestedSek)
 
             except Exception as ex:
                 print(f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
@@ -72,27 +89,32 @@ class MainBroker:
     # ##############################################################################################################
     # Performs a buy order. Returns the new number of stocks owned.
     # ##############################################################################################################
-    def buyOneStockUntilDone(self, countAtStart: int, expectedWhenDone: int, yahooTicker: str, accountId: str, tickerId: str, price: float, volume: int):
+    def doOneTransactionAndCheckResult(self, transactionType: TransactionType, countAtStart: int, expectedWhenDone: int, yahooTicker: str, accountId: str, tickerId: str, price: float, volume: int):
 
         WAIT_SEC_FOR_COMPLETION = 5
 
-        retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, OrderType.BUY, price, volume)
+        if transactionType == TransactionType.Buy:
+            orderType = OrderType.BUY
+        else:
+            orderType = OrderType.SELL
+
+        retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, orderType, price, volume)
         time.sleep(1)
 
         if retVal['status'] != "SUCCESS":
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
-            raise RuntimeError(f"{yahooTicker}: Could not place order towards avanza, {retVal}, accountId {accountId}, price: {price}, volume {volume}")
+            raise RuntimeError(f"{yahooTicker}: Could not place order {orderType} towards avanza, {retVal}, accountId {accountId}, price: {price}, volume {volume}")
 
         for a in range(WAIT_SEC_FOR_COMPLETION):
             avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
             if avanzaDetails['currentCount'] == expectedWhenDone:
-                print(f"Stock successfully bought {yahooTicker}, volume {volume}")
+                print(f"{yahooTicker} Stock successfully transacted {orderType}, volume {volume}")
                 return avanzaDetails['currentCount']
-            
-            print(f"{yahooTicker} Buy order is on market.. Waiting...")
+
+            print(f"{yahooTicker} {orderType} order is on market.. Waiting...")
             time.sleep(1)
 
-        print(f"{yahooTicker} Failed to buy stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
+        print(f"{yahooTicker} {orderType} Failed to transact stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
 
         try:
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
@@ -103,11 +125,11 @@ class MainBroker:
         avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
         if avanzaDetails['currentCount'] == expectedWhenDone:
-            print(f"{yahooTicker} Successfully bought, volume {volume}")
+            print(f"{yahooTicker} {orderType} Successfully transacted, volume {volume}")
         elif avanzaDetails['currentCount'] == countAtStart:
-            print(f"{yahooTicker} No stocks were bought")
+            print(f"{yahooTicker} {orderType} No stocks transacted")
         else:
-            print(f"{yahooTicker} partly bought. Got: {avanzaDetails['currentCount'] - countAtStart} out of {volume}")
+            print(f"{yahooTicker} {orderType} partly transacted. Current: {avanzaDetails['currentCount']}, before: {countAtStart} out of {volume}")
 
         return avanzaDetails['currentCount']
 
@@ -125,8 +147,13 @@ class MainBroker:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def checkIfMarketIsOpen(self):
-        pass
+    def getStockSellPrice(self, sellPrice: float, buyPrice: float):
+        if sellPrice / buyPrice > MAX_DEVIATE_PRICE:
+            print("using sellPrice when selling, due to to large difference")
+            return sellPrice
+        else:
+            print("using buyPrice when selling")
+            return buyPrice
 
     # ##############################################################################################################
     # ...
@@ -152,13 +179,6 @@ class MainBroker:
         # ToDo: ENABLE!!
         #if avanzaDetails['currentCount'] != tradingPalDetails['currentStock']['count']:
         #    raise RuntimeError(f"Stock count in avanza does not match count from tradingPal. Abort")
-
-    # ##############################################################################################################
-    # ...
-    # ##############################################################################################################
-    def handleSellStocks(self, stocks):
-        self.refreshAvanzaHandler()
-        pass
 
     # ##############################################################################################################
     # ...
@@ -191,14 +211,14 @@ class MainBroker:
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
                 if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
-                    self.handleBuyStocks(stocksToBuy['list'])
+                    self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
             except Exception as ex:
                 print(f"Exception during buy, {ex}")
 
             try:
                 stocksToSell = self.fetchTickers(SELL_PATH)
                 if stocksToSell is not None and len(stocksToSell['list']) > 0:
-                    self.handleSellStocks(stocksToSell['list'])
+                    self.doStocksTransaction(stocksToSell['list'], TransactionType.Sell)
             except Exception as ex:
                 print(f"Exception during sell, {ex}")
 
@@ -268,6 +288,7 @@ class MainBroker:
     # ...
     # ##############################################################################################################
     def lockStock(self, ticker: str):
+
         try:
             retData = requests.post(BASEURL + "lock", json= {"ticker": ticker})
             if retData.status_code != 200:
@@ -300,8 +321,6 @@ class MainBroker:
 
         hour = datetime.datetime.now(pytz.timezone('Europe/Stockholm')).hour
         return hour >= MARKET_OPEN_HOUR and hour < MARKET_CLOSE_HOUR
-
-
 
 # ##############################################################################################################
 # ...
