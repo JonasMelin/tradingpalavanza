@@ -6,7 +6,7 @@ from avanza import OrderType
 # Proper log function to file
 #
 
-BASEURL = "http://192.168.1.50:5000/tradingpal/"
+BASEURL = "http://localhost:5000/tradingpal/"
 BUY_PATH = "getStocksToBuy"
 SELL_PATH = "getStocksToSell"
 
@@ -17,7 +17,8 @@ MAX_DEVIATE_PRICE = 1.03
 MAX_SANITY_QUOTA_SELL_BUY = 1.12
 
 # will not go through with transaction if stock price was not updated last sec
-MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 60
+# Note that we get delayed prices 15 minutes. ToDo: Fix this depending upon market...
+MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 1200
 
 # Define during what hours transactions shall be attempted.
 MARKET_OPEN_HOUR = 9
@@ -68,28 +69,43 @@ class MainBroker:
                     continue
 
                 self.sanityCheckStock(avanzaDetails, stock)
+                self.addEvent(EventType.AvanzaTransaction)
 
                 countAtStart = avanzaDetails['currentCount']
 
-                if transactionType == TransactionType.Buy:
-                    numberToTransact = stock["numberToBuy"]
-                    expectedCountWhenDone = countAtStart + numberToTransact
-                    transactionPrice = self.getStockBuyPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
+                if transactionType == TransactionType.Sell:
+                    price = avanzaDetails["buyPrice"]
+                    startPrice = avanzaDetails["buyPrice"]
                 else:
-                    numberToTransact = stock["numberToSell"]
-                    expectedCountWhenDone = countAtStart - numberToTransact
-                    transactionPrice = self.getStockSellPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
+                    price = avanzaDetails["sellPrice"]
+                    startPrice = avanzaDetails["sellPrice"]
 
-                newTotalCount = self.doOneTransactionAndCheckResult(transactionType, countAtStart, expectedCountWhenDone, yahooTicker, avanzaDetails['accountId'], tickerId, transactionPrice, numberToTransact)
+                for a in range(3):
 
-                if newTotalCount != countAtStart:
-                    newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + (newTotalCount - countAtStart) * transactionPrice)
-                    self.updateStock(
-                        yahooTicker,
-                        transactionPrice if transactionType == TransactionType.Buy else None,
-                        transactionPrice if transactionType == TransactionType.Sell else None,
-                        newTotalCount, lockKey, stock['currentStock']['name'], newTotalInvestedSek)
+                    if transactionType == TransactionType.Buy:
+                        numberToTransact = stock["numberToBuy"]
+                        expectedCountWhenDone = countAtStart + numberToTransact
+                        price = self.getNewStockPrice(TransactionType.Buy, avanzaDetails, price)
+                    else:
+                        numberToTransact = stock["numberToSell"]
+                        expectedCountWhenDone = countAtStart - numberToTransact
+                        price = self.getNewStockPrice(TransactionType.Sell, avanzaDetails, price)
 
+                    newTotalCount = self.doOneTransactionAndCheckResult(transactionType, countAtStart,
+                                                                        expectedCountWhenDone, yahooTicker,
+                                                                        avanzaDetails['accountId'], tickerId,
+                                                                        price, numberToTransact)
+
+                    if newTotalCount != countAtStart:
+                        newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + (newTotalCount - countAtStart) * startPrice)
+                        self.updateStock(
+                            yahooTicker,
+                            price if transactionType == TransactionType.Buy else None,
+                            price if transactionType == TransactionType.Sell else None,
+                            newTotalCount, lockKey, stock['currentStock']['name'], newTotalInvestedSek)
+
+                        break
+                    
             except Exception as ex:
                 print(f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
             finally:
@@ -100,14 +116,13 @@ class MainBroker:
     # ##############################################################################################################
     def doOneTransactionAndCheckResult(self, transactionType: TransactionType, countAtStart: int, expectedWhenDone: int, yahooTicker: str, accountId: str, tickerId: str, price: float, volume: int):
 
-        WAIT_SEC_FOR_COMPLETION = 5
+        WAIT_SEC_FOR_COMPLETION = 3
 
         if transactionType == TransactionType.Buy:
             orderType = OrderType.BUY
         else:
             orderType = OrderType.SELL
 
-        self.addEvent(EventType.AvanzaTransaction)
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, orderType, price, volume)
         time.sleep(1)
 
@@ -128,7 +143,7 @@ class MainBroker:
 
         try:
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
-        except:
+        except Exception:
             print("Could not delete order... Ignoring")
 
         time.sleep(1)
@@ -143,27 +158,20 @@ class MainBroker:
 
         return avanzaDetails['currentCount']
 
-    # ##############################################################################################################
-    # ...
-    # ##############################################################################################################
-    def getStockBuyPrice(self, sellPrice: float, buyPrice: float):
-        if sellPrice / buyPrice > MAX_DEVIATE_PRICE:
-            print("using buyPrice when buying, due to to large difference")
-            return buyPrice
-        else:
-            print("using sellPrice when buying")
-            return sellPrice
+        # ##############################################################################################################
+        # get sell price from best price (priceLevel == 1) to worst price (priceLevel == ~4)
+        # ##############################################################################################################
 
-    # ##############################################################################################################
-    # ...
-    # ##############################################################################################################
-    def getStockSellPrice(self, sellPrice: float, buyPrice: float):
-        if sellPrice / buyPrice > MAX_DEVIATE_PRICE:
-            print("using sellPrice when selling, due to to large difference")
-            return sellPrice
+    def getNewStockPrice(self, transactionType :TransactionType, avanzaDetails, lastPrice: int):
+
+        if avanzaDetails['tick1Percent'] <= 0:
+            raise RuntimeError("tick1Percent not calculated for stock")
+
+        if transactionType == TransactionType.Buy:
+            return float("%.4f" % (lastPrice + avanzaDetails['tick1Percent']))
         else:
-            print("using buyPrice when selling")
-            return buyPrice
+            return float("%.4f" % (lastPrice - avanzaDetails['tick1Percent']))
+
 
     # ##############################################################################################################
     # ...
@@ -184,7 +192,7 @@ class MainBroker:
             raise RuntimeError(f"sell/buy price: {sellPrice}/{buyPrice} > {MAX_SANITY_QUOTA_SELL_BUY}. Not reasonable...")
 
         if avanzaDetails['secondsSinceUpdated'] > MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC:
-            raise RuntimeError(f"Stock price was not updated. So, the market is probably closed...")
+            raise RuntimeError(f"Stock price was not updated. So, the market is probably closed... seconds since updated {avanzaDetails['secondsSinceUpdated']}")
 
         if avanzaDetails['currentCount'] != tradingPalDetails['currentStock']['count']:
             raise RuntimeError(f"Stock count in avanza does not match count from tradingPal. Abort")
@@ -198,7 +206,7 @@ class MainBroker:
 
         try:
             self.avanzaHandler.testAvanzaConnection()
-        except Exception as ex:
+        except Exception:
             print("Need to refresh AvanzaHandler...")
             self.avanzaHandler = AvanzaHandler.AvanzaHandler()
             self.avanzaHandler.testAvanzaConnection()
@@ -376,8 +384,12 @@ class MainBroker:
         self.refreshEventCounter()
         return self.events[event]['count'] <= self.events[event]['maxAllowed']
 
+
 # ##############################################################################################################
 # ...
 # ##############################################################################################################
 if __name__ == "__main__":
+
     MainBroker().run()
+
+

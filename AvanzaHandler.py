@@ -84,7 +84,9 @@ class AvanzaHandler:
             'sellPrice': float,
             'accountId': str,
             'currentCount': int,
-            'secondsSinceUpdated': int
+            'secondsSinceUpdated': int,
+            'tickSize': float,
+            'tick1Percent': float
         }
         try:
             data = self.avanza.get_stock_info(tickerId)
@@ -94,8 +96,17 @@ class AvanzaHandler:
 
         try:
             retData['secondsSinceUpdated'] = self.secondsSinceDate(data['lastPriceUpdated'])
-            retData['buyPrice'] = data['buyPrice']
-            retData['sellPrice'] = data['sellPrice']
+            retData['buyPrice'] = data['buyPrice'] if 'buyPrice' in data else -1
+            retData['sellPrice'] = data['sellPrice'] if 'sellPrice' in data else -1
+            retData['tickSize'] = self.guessTickSize(data)
+            retData['tick1Percent'] = -1
+
+            if retData['buyPrice'] > 0 and retData['sellPrice'] > 0 and retData['tickSize'] > 0:
+                price = (retData['buyPrice'] + retData['sellPrice']) / 2
+                onePctPrice = 0.01 * price
+                ticks = int(onePctPrice / retData['tickSize'])
+                retData['tick1Percent'] = (ticks if ticks > 0 else 1) * retData['tickSize']
+                retData['tick1Percent'] = float("%.4f" % (retData['tick1Percent']))
 
             positions = data['positions']
 
@@ -113,6 +124,54 @@ class AvanzaHandler:
         except Exception as ex:
             print(f"Could not extract stock info, id {tickerId}, {ex}")
             raise ex
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def guessTickSize(self, data):
+
+        prices = {}
+
+        if 'lastPrice' in data:
+            prices[data['lastPrice']] = 0
+        if 'lowestPrice' in data:
+            prices[data['lowestPrice']] = 0
+        if 'highestPrice' in data:
+            prices[data['highestPrice']] = 0
+        if 'buyPrice' in data:
+            prices[data['buyPrice']] = 0
+        if 'sellPrice' in data:
+            prices[data['sellPrice']] = 0
+
+        if 'orderDepthLevels' in data:
+            for nextDepth in data['orderDepthLevels']:
+                try:
+                    prices[nextDepth['sell']['price']] = 0
+                    prices[nextDepth['buy']['price']] = 0
+                except Exception:
+                    pass
+
+        if 'latestTrades' in data:
+            for nextTrade in data['latestTrades']:
+                if 'price' in nextTrade:
+                    prices[nextTrade['price']] = 0
+
+        prices = sorted(prices)
+
+        if len(prices) < 2:
+            print("Could not get tick size")
+            return -1
+
+        tickSize = 100000.0
+        prior = None
+        for p in prices:
+            if prior is not None:
+                diff = p - prior
+                if diff < tickSize:
+                    tickSize = diff
+            prior = p
+
+        return float("%.4f" % tickSize)
 
     # ##############################################################################################################
     # ToDo: Implement
@@ -204,6 +263,10 @@ if __name__ == "__main__":
     stocksBuyer = AvanzaHandler()
     stocksBuyer.testAvanzaConnection()
 
+    id = stocksBuyer.tickerToId("BBD-B.TO")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
     id = stocksBuyer.tickerToId("CAPMAN.HE")
     tickerDetails = stocksBuyer.getTickerDetails(id)
     print(tickerDetails)
@@ -213,10 +276,6 @@ if __name__ == "__main__":
     print(tickerDetails)
 
     id = stocksBuyer.tickerToId("HAV-B.ST")
-    tickerDetails = stocksBuyer.getTickerDetails(id)
-    print(tickerDetails)
-
-    id = stocksBuyer.tickerToId("BBD-B.TO")
     tickerDetails = stocksBuyer.getTickerDetails(id)
     print(tickerDetails)
 
@@ -236,4 +295,4 @@ if __name__ == "__main__":
     tickerDetails = stocksBuyer.getTickerDetails(id)
     print(tickerDetails)
 
-    #stocksBuyer.placeOrder("TUI1.DE", tickerDetails['accountId'], id, OrderType.BUY, tickerDetails['buyPrice'], 1)
+    #stocksBuyer.placeOrder("DANSKE.CO", tickerDetails['accountId'], id, OrderType.BUY, 109.71, 1)
