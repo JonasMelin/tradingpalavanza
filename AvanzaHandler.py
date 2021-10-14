@@ -55,7 +55,7 @@ class AvanzaHandler:
                     return None
 
                 if tickerPart == topHit['tickerSymbol'] and flagCode == topHit['flagCode']:
-                    print(f"Translating {yahooTicker} -> {topHit['name']} (id: {topHit['id']})")
+                    print(f"Translating {yahooTicker} -> {topHit['tickerSymbol']} / {topHit['flagCode']} / {topHit['name']} (id: {topHit['id']})")
                     return topHit['id']
 
         print(f"WARN: Failed to lookup ticker {yahooTicker}")
@@ -172,8 +172,6 @@ class AvanzaHandler:
             tickerPart = yahooTicker.split('.')[0]
             flagCode = yahooTicker.split('.')[1]
 
-        tickerPart = tickerPart.replace('-', '.')
-
         if flagCode.lower() == 'de':
             tickerPart += "d"
 
@@ -182,6 +180,20 @@ class AvanzaHandler:
 
         if flagCode.lower() == 'ol':
             flagCode = 'NO'
+
+        if flagCode.lower() == 'he':
+            flagCode = 'FI'
+
+        if flagCode.lower() == 'st':
+            flagCode = 'SE'
+
+        if flagCode.lower() == 'co':
+            flagCode = 'DK'
+
+        if flagCode == 'SE':
+            tickerPart = tickerPart.replace('-', ' ')
+        else:
+            tickerPart = tickerPart.replace('-', '.')
 
         return tickerPart, flagCode
 
@@ -192,11 +204,36 @@ if __name__ == "__main__":
     stocksBuyer = AvanzaHandler()
     stocksBuyer.testAvanzaConnection()
 
+    id = stocksBuyer.tickerToId("CAPMAN.HE")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
+    id = stocksBuyer.tickerToId("TELIA.ST")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
+    id = stocksBuyer.tickerToId("HAV-B.ST")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
+    id = stocksBuyer.tickerToId("BBD-B.TO")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
+    id = stocksBuyer.tickerToId("AR4.DE")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
     id = stocksBuyer.tickerToId("AKSO.OL")
     tickerDetails = stocksBuyer.getTickerDetails(id)
-    orderDetails = stocksBuyer.getOrderDetails("")
-
     print(tickerDetails)
-    print(orderDetails)
+
+    id = stocksBuyer.tickerToId("CAPMAN.HE")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
+
+    id = stocksBuyer.tickerToId("DANSKE.CO")
+    tickerDetails = stocksBuyer.getTickerDetails(id)
+    print(tickerDetails)
 
     #stocksBuyer.placeOrder("TUI1.DE", tickerDetails['accountId'], id, OrderType.BUY, tickerDetails['buyPrice'], 1)
