@@ -1,6 +1,11 @@
 import time, datetime, json, requests, AvanzaHandler, sys, pytz, enum
 from avanza import OrderType
 
+#
+# ToDo:
+# Proper log function to file
+#
+
 BASEURL = "http://192.168.1.50:5000/tradingpal/"
 BUY_PATH = "getStocksToBuy"
 SELL_PATH = "getStocksToSell"
@@ -22,6 +27,10 @@ class TransactionType(enum.Enum):
    Buy = 1
    Sell = 2
 
+class EventType(enum.Enum):
+    AvanzaTransaction = 1,
+    AvanzaErrors = 2
+
 class MainBroker:
 
     # ##############################################################################################################
@@ -29,7 +38,7 @@ class MainBroker:
     # ##############################################################################################################
     def __init__(self):
 
-        self.avanzaErrors = 0
+        self.resetEventCounters()
         self.avanzaHandler = None
 
         self.buySellHash = {
@@ -98,6 +107,7 @@ class MainBroker:
         else:
             orderType = OrderType.SELL
 
+        self.addEvent(EventType.AvanzaTransaction)
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, orderType, price, volume)
         time.sleep(1)
 
@@ -184,7 +194,7 @@ class MainBroker:
     # ##############################################################################################################
     def refreshAvanzaHandler(self):
 
-        self.avanzaErrors += 1
+        self.addEvent(EventType.AvanzaErrors)
 
         try:
             self.avanzaHandler.testAvanzaConnection()
@@ -193,19 +203,25 @@ class MainBroker:
             self.avanzaHandler = AvanzaHandler.AvanzaHandler()
             self.avanzaHandler.testAvanzaConnection()
 
-        self.avanzaErrors = 0
+        self.resetEvent(EventType.AvanzaErrors)
 
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
     def run(self):
+
+        print("Starting up...")
+
         while True:
             if not self.marketsOpenDaytime():
                 print("Night....")
                 time.sleep(60)
                 continue
 
-            print("Main loop running")
+            if not self.isEventAllowed(EventType.AvanzaTransaction) or not self.isEventAllowed(EventType.AvanzaErrors):
+                print(f"To many events in one day. Stepping back... {self.events}")
+                time.sleep(3600)
+                continue
 
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
@@ -223,14 +239,7 @@ class MainBroker:
             except Exception as ex:
                 print(f"Exception during sell, {ex}")
 
-            if self.avanzaErrors > 0:
-                print(f"WARNING: Avanza errors: {self.avanzaErrors}")
-            if self.avanzaErrors > 20:
-                print("To many avanza errors. exiting!!!")
-                exit(27)
-                return
-
-            time.sleep(5 * (self.avanzaErrors + 1))
+            time.sleep(60)
 
     # ##############################################################################################################
     # ...
@@ -248,7 +257,6 @@ class MainBroker:
             newHash = hash(str(dataAsJson["list"]))
 
             if self.buySellHash[path] == newHash:
-                print("Same prices!!")
                 return None
             else:
                 print("Updated prices!!")
@@ -321,6 +329,52 @@ class MainBroker:
 
         hour = datetime.datetime.now(pytz.timezone('Europe/Stockholm')).hour
         return hour >= MARKET_OPEN_HOUR and hour < MARKET_CLOSE_HOUR
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def resetEventCounters(self):
+
+        self.events = {
+            "day": datetime.datetime.now(pytz.timezone('Europe/Stockholm')).day,
+            EventType.AvanzaTransaction: {"count": 0, "maxAllowed": 10},
+            EventType.AvanzaErrors: {"count": 0, "maxAllowed": 10}
+        }
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def refreshEventCounter(self):
+
+        if self.events is None:
+            self.resetEventCounters()
+            return
+
+        if self.events['day'] != datetime.datetime.now(pytz.timezone('Europe/Stockholm')).day:
+            self.resetEventCounters()
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def addEvent(self, event: EventType):
+
+        self.refreshEventCounter()
+        self.events[event]["count"] += 1
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def resetEvent(self, event: EventType):
+        self.refreshEventCounter()
+        self.events[event]['count'] = 0
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def isEventAllowed(self, event: EventType):
+
+        self.refreshEventCounter()
+        return self.events[event]['count'] <= self.events[event]['maxAllowed']
 
 # ##############################################################################################################
 # ...
