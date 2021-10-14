@@ -1,7 +1,7 @@
 import time, datetime, json, requests, AvanzaHandler, sys, pytz, enum
 from avanza import OrderType
 
-BASEURL = "http://localhost:5000/tradingpal/"
+BASEURL = "http://192.168.1.50:5000/tradingpal/"
 BUY_PATH = "getStocksToBuy"
 SELL_PATH = "getStocksToSell"
 
@@ -64,11 +64,11 @@ class MainBroker:
 
                 if transactionType == TransactionType.Buy:
                     numberToTransact = stock["numberToBuy"]
-                    expectedCountWhenDone = countAtStart - numberToTransact
+                    expectedCountWhenDone = countAtStart + numberToTransact
                     transactionPrice = self.getStockBuyPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
                 else:
                     numberToTransact = stock["numberToSell"]
-                    expectedCountWhenDone = countAtStart + numberToTransact
+                    expectedCountWhenDone = countAtStart - numberToTransact
                     transactionPrice = self.getStockSellPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
 
                 newTotalCount = self.doOneTransactionAndCheckResult(transactionType, countAtStart, expectedCountWhenDone, yahooTicker, avanzaDetails['accountId'], tickerId, transactionPrice, numberToTransact)
@@ -176,9 +176,8 @@ class MainBroker:
         if avanzaDetails['secondsSinceUpdated'] > MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC:
             raise RuntimeError(f"Stock price was not updated. So, the market is probably closed...")
 
-        # ToDo: ENABLE!!
-        #if avanzaDetails['currentCount'] != tradingPalDetails['currentStock']['count']:
-        #    raise RuntimeError(f"Stock count in avanza does not match count from tradingPal. Abort")
+        if avanzaDetails['currentCount'] != tradingPalDetails['currentStock']['count']:
+            raise RuntimeError(f"Stock count in avanza does not match count from tradingPal. Abort")
 
     # ##############################################################################################################
     # ...
@@ -212,6 +211,7 @@ class MainBroker:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
                 if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
                     self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
+                    time.sleep(120)
             except Exception as ex:
                 print(f"Exception during buy, {ex}")
 
@@ -219,6 +219,7 @@ class MainBroker:
                 stocksToSell = self.fetchTickers(SELL_PATH)
                 if stocksToSell is not None and len(stocksToSell['list']) > 0:
                     self.doStocksTransaction(stocksToSell['list'], TransactionType.Sell)
+                    time.sleep(120)
             except Exception as ex:
                 print(f"Exception during sell, {ex}")
 
@@ -279,7 +280,6 @@ class MainBroker:
             retData = requests.post(BASEURL + "updateStock", json=body)
             if retData.status_code != 200:
                 raise RuntimeError(f"Failed to update stock {tickerName}, {retData.content}")
-            return json.loads(retData.content)['lockKey']
         except Exception as ex:
             print(f"Failed to update stock {tickerName}, {ex}")
             raise ex
