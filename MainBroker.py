@@ -1,14 +1,22 @@
-import time, datetime, json, requests, AvanzaHandler, sys
+import time, datetime, json, requests, AvanzaHandler, sys, pytz
 from avanza import OrderType
 
 BASEURL = "http://localhost:5000/tradingpal/"
 BUY_PATH = "getStocksToBuy"
 SELL_PATH = "getStocksToSell"
 
-# If price quota differs more than this the higher/lower bid will not be used.
+# If buy/sell price quota differs more than this, a buy bid will use buy price, sell bid use sell price.
 MAX_DEVIATE_PRICE = 1.03
+
+# If buy/sell price quota differs more than this, the entire transaction will be cancelled
 MAX_SANITY_QUOTA_SELL_BUY = 1.12
+
+# will not go through with transaction if stock price was not updated last sec
 MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 60
+
+# Define during what hours transactions shall be attempted.
+MARKET_OPEN_HOUR = 9
+MARKET_CLOSE_HOUR = 23
 
 class MainBroker:
 
@@ -33,13 +41,13 @@ class MainBroker:
 
         for stock in stocks:
             lockKey = None
+            yahooTicker = None
             try:
                 yahooTicker = stock['tickerName']
-
                 lockKey = self.lockStock(yahooTicker)
-                print(f"---------- BUYING STOCKS ----------- {stock['currentStock']['name']}/{yahooTicker} -------")
-                tickerId = self.avanzaHandler.tickerToId(yahooTicker)
 
+                print(f"---------- BUYING STOCK ----------- {stock['currentStock']['name']}/{yahooTicker} -------")
+                tickerId = self.avanzaHandler.tickerToId(yahooTicker)
                 avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
                 if avanzaDetails is None:
@@ -53,16 +61,13 @@ class MainBroker:
                 buyPrice = self.getStockBuyPrice(avanzaDetails['sellPrice'], avanzaDetails['buyPrice'])
                 newTotalCount = self.buyOneStockUntilDone(countAtStart, expectedCountWhenDone, yahooTicker, avanzaDetails['accountId'], tickerId, buyPrice, numberToBuy)
                 if newTotalCount != countAtStart:
-                    print(f"Updating backend with new data...")
-                    #update backend
+                    newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + (newTotalCount - countAtStart) * buyPrice)
+                    self.updateStock(yahooTicker, buyPrice, None, newTotalCount, lockKey, stock['currentStock']['name'], newTotalInvestedSek)
 
             except Exception as ex:
                 print(f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
             finally:
                 self.unlockStock(yahooTicker, lockKey)
-
-
-            #orderDetails = stocksBuyer.getOrderDetails("")
 
     # ##############################################################################################################
     # Performs a buy order. Returns the new number of stocks owned.
@@ -83,6 +88,8 @@ class MainBroker:
             if avanzaDetails['currentCount'] == expectedWhenDone:
                 print(f"Stock successfully bought {yahooTicker}, volume {volume}")
                 return avanzaDetails['currentCount']
+            
+            print(f"{yahooTicker} Buy order is on market.. Waiting...")
             time.sleep(1)
 
         print(f"{yahooTicker} Failed to buy stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
@@ -174,6 +181,13 @@ class MainBroker:
     # ##############################################################################################################
     def run(self):
         while True:
+            if not self.marketsOpenDaytime():
+                print("Night....")
+                time.sleep(60)
+                continue
+
+            print("Main loop running")
+
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
                 if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
@@ -213,8 +227,10 @@ class MainBroker:
             newHash = hash(str(dataAsJson["list"]))
 
             if self.buySellHash[path] == newHash:
+                print("Same prices!!")
                 return None
             else:
+                print("Updated prices!!")
                 self.buySellHash[path] = newHash
                 return dataAsJson
 
@@ -225,11 +241,37 @@ class MainBroker:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
+    def updateStock(self, tickerName: str, boughtAt, soldAt, count: int, lockKey: int, name: str, totalInvestedSek: int):
+
+        body = {
+            'ticker': tickerName,
+            'boughtAt': boughtAt,
+            'soldAt': soldAt,
+            'count': count,
+            'lockKey': lockKey,
+            'name': name,
+            'totalInvestedSek': totalInvestedSek,
+        }
+
+        print(f"Saving stock data: {body}")
+
+        try:
+            retData = requests.post(BASEURL + "updateStock", json=body)
+            if retData.status_code != 200:
+                raise RuntimeError(f"Failed to update stock {tickerName}, {retData.content}")
+            return json.loads(retData.content)['lockKey']
+        except Exception as ex:
+            print(f"Failed to update stock {tickerName}, {ex}")
+            raise ex
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def lockStock(self, ticker: str):
         try:
             retData = requests.post(BASEURL + "lock", json= {"ticker": ticker})
             if retData.status_code != 200:
-                raise RuntimeError(f"Failed to lock stock {ticker}, {retData}")
+                raise RuntimeError(f"Failed to lock stock {ticker}, {retData.content}")
             return json.loads(retData.content)['lockKey']
         except Exception as ex:
             print(f"Failed to lock stock {ticker}, {ex}")
@@ -246,10 +288,20 @@ class MainBroker:
         try:
             retData = requests.post(BASEURL + "unlock", json= {"ticker": ticker, "lockKey": lockKey})
             if retData.status_code != 200:
-                raise RuntimeError(f"Failed to unlock stock {ticker}, {retData}")
+                raise RuntimeError(f"Failed to unlock stock {ticker}, {retData.content}")
         except Exception as ex:
             print(f"Failed to unlock stock {ticker}, {ex}")
             raise ex
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def marketsOpenDaytime(self):
+
+        hour = datetime.datetime.now(pytz.timezone('Europe/Stockholm')).hour
+        return hour >= MARKET_OPEN_HOUR and hour < MARKET_CLOSE_HOUR
+
+
 
 # ##############################################################################################################
 # ...
