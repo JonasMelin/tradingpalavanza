@@ -40,7 +40,7 @@ class MainBroker:
     def __init__(self):
 
         self.resetEventCounters()
-        self.avanzaHandler = None
+        self.avanzaHandler = self.refreshAvanzaHandler()
 
         self.buySellHash = {
             BUY_PATH: 0,
@@ -137,6 +137,7 @@ class MainBroker:
                 return avanzaDetails['currentCount']
 
             print(f"{yahooTicker} {orderType} order is on market.. Waiting...")
+            sys.stdout.flush()
             time.sleep(1)
 
         print(f"{yahooTicker} {orderType} Failed to transact stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
@@ -146,6 +147,7 @@ class MainBroker:
         except Exception:
             print("Could not delete order... Ignoring")
 
+        sys.stdout.flush()
         time.sleep(1)
         avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
@@ -168,9 +170,12 @@ class MainBroker:
             raise RuntimeError("tick1Percent not calculated for stock")
 
         if transactionType == TransactionType.Buy:
-            return float("%.4f" % (lastPrice + avanzaDetails['tick1Percent']))
+            newVal = float("%.4f" % (lastPrice + avanzaDetails['tick1Percent']))
         else:
-            return float("%.4f" % (lastPrice - avanzaDetails['tick1Percent']))
+            newVal = float("%.4f" % (lastPrice - avanzaDetails['tick1Percent']))
+
+        print(f"Changing bidValue: {transactionType} / from {lastPrice} to {newVal}")
+        return newVal
 
 
     # ##############################################################################################################
@@ -218,16 +223,20 @@ class MainBroker:
     # ##############################################################################################################
     def run(self):
 
-        print("Starting up...")
+        print("Starting up, test connections to trading pal algorithm...")
+
+        self.waitForConnectonToTradingPal()
 
         while True:
             if not self.marketsOpenDaytime():
-                print("Night....")
-                time.sleep(60)
+                print("Markets closed...")
+                sys.stdout.flush()
+                time.sleep(120)
                 continue
 
             if not self.isEventAllowed(EventType.AvanzaTransaction) or not self.isEventAllowed(EventType.AvanzaErrors):
                 print(f"To many events in one day. Stepping back... {self.events}")
+                sys.stdout.flush()
                 time.sleep(3600)
                 continue
 
@@ -235,6 +244,7 @@ class MainBroker:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
                 if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
                     self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
+                    sys.stdout.flush()
                     time.sleep(120)
             except Exception as ex:
                 print(f"Exception during buy, {ex}")
@@ -243,11 +253,22 @@ class MainBroker:
                 stocksToSell = self.fetchTickers(SELL_PATH)
                 if stocksToSell is not None and len(stocksToSell['list']) > 0:
                     self.doStocksTransaction(stocksToSell['list'], TransactionType.Sell)
+                    sys.stdout.flush()
                     time.sleep(120)
             except Exception as ex:
                 print(f"Exception during sell, {ex}")
 
+            sys.stdout.flush()
             time.sleep(60)
+
+    def waitForConnectonToTradingPal(self):
+        while True:
+            if self.fetchTickers(BUY_PATH) is not None:
+                print("Connection to trading pal algorithm OK!")
+                break
+            else:
+                print(f"Connection to tradingpal is still no OK. Retrying...")
+                time.sleep(5)
 
     # ##############################################################################################################
     # ...
@@ -336,7 +357,9 @@ class MainBroker:
     def marketsOpenDaytime(self):
 
         hour = datetime.datetime.now(pytz.timezone('Europe/Stockholm')).hour
-        return hour >= MARKET_OPEN_HOUR and hour < MARKET_CLOSE_HOUR
+        weekday = datetime.datetime.now(pytz.timezone('Europe/Stockholm')).weekday()
+
+        return (hour >= MARKET_OPEN_HOUR and hour < MARKET_CLOSE_HOUR) and (weekday >= 0 and weekday <= 4)
 
     # ##############################################################################################################
     # ...

@@ -1,7 +1,7 @@
-import passwords
-import datetime
-import pytz
+import datetime, pytz, os, json
 from avanza import Avanza, OrderType
+
+passwordPaths = ["./passwords.json", "/passwords/passwords.json"]
 
 class AvanzaHandler:
 
@@ -12,16 +12,38 @@ class AvanzaHandler:
     # ...
     # ##############################################################################################################
     def __init__(self):
+        self.avanzaTestedOk = False
+        self.credentials = {}
+        self.readPasswordsFromFile()
         self.login()
+
+    def readPasswordsFromFile(self):
+        for path in passwordPaths:
+            try:
+                if os.path.isfile(path):
+                    with open(path, "r") as jsonFile:
+                        self.credentials = json.load(jsonFile)
+                        break
+
+            except Exception:
+                pass
+
+        if self.credentials is None or "username" not in self.credentials or\
+                "password" not in self.credentials or "totpSecret" not in self.credentials:
+            raise RuntimeError(f"Please provide a json file in some of the paths ({passwordPaths}) \
+            with keys: \'username\', \'password\' and \'totpSecret\'")
+
+        print("Successfully read credentials from file...")
+
 
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
     def login(self):
         self.avanza = Avanza({
-            'username': passwords.Passwords.username,
-            'password': passwords.Passwords.password,
-            'totpSecret': passwords.Passwords.totpSecret
+            'username': self.credentials['username'],
+            'password': self.credentials['password'],
+            'totpSecret': self.credentials['totpSecret']
         })
 
     # ##############################################################################################################
@@ -29,6 +51,10 @@ class AvanzaHandler:
     # ##############################################################################################################
     def testAvanzaConnection(self):
         self.avanza.get_overview()
+
+        if not self.avanzaTestedOk:
+            print("Connection to Avanza is OK!")
+            self.avanzaTestedOk = True
 
     # ##############################################################################################################
     # ...
