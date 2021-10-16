@@ -1,10 +1,6 @@
-import time, datetime, json, requests, AvanzaHandler, sys, pytz, enum
-from avanza import OrderType
-
-#
-# ToDo:
-# Proper log function to file
-#
+import time, datetime, json, requests, sys, pytz, enum
+from AvanzaHandler import AvanzaHandler, TransactionType
+from Logger import Log, LogType
 
 BASEURL = "http://192.168.1.50:5000/tradingpal/"
 BUY_PATH = "getStocksToBuy"
@@ -24,9 +20,7 @@ MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 1200
 MARKET_OPEN_HOUR = 9
 MARKET_CLOSE_HOUR = 23
 
-class TransactionType(enum.Enum):
-   Buy = 1
-   Sell = 2
+log = Log()
 
 class EventType(enum.Enum):
     AvanzaTransaction = 1,
@@ -40,7 +34,7 @@ class MainBroker:
     def __init__(self):
 
         self.resetEventCounters()
-        self.avanzaHandler = self.refreshAvanzaHandler()
+        self.refreshAvanzaHandler()
 
         self.buySellHash = {
             BUY_PATH: 0,
@@ -60,12 +54,12 @@ class MainBroker:
                 yahooTicker = stock['tickerName']
                 lockKey = self.lockStock(yahooTicker)
 
-                print(f"---------- TRANSACTING STOCK ----------- {stock['currentStock']['name']}/{yahooTicker} -------")
+                log.log(LogType.Trace, f"---------- TRANSACTING STOCK ----------- {stock['currentStock']['name']}/{yahooTicker} -------")
                 tickerId = self.avanzaHandler.tickerToId(yahooTicker)
                 avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
                 if avanzaDetails is None:
-                    print(f"WARN: could not find ticker in avanza: {yahooTicker}")
+                    log.log(LogType.Trace, f"WARN: could not find ticker in avanza: {yahooTicker}")
                     continue
 
                 self.sanityCheckStock(avanzaDetails, stock)
@@ -97,17 +91,19 @@ class MainBroker:
                                                                         price, numberToTransact)
 
                     if newTotalCount != countAtStart:
-                        newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + (newTotalCount - countAtStart) * startPrice)
+                        spent = (newTotalCount - countAtStart) * startPrice
+                        newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + spent)
                         self.updateStock(
                             yahooTicker,
                             price if transactionType == TransactionType.Buy else None,
                             price if transactionType == TransactionType.Sell else None,
-                            newTotalCount, lockKey, stock['currentStock']['name'], newTotalInvestedSek)
+                            countAtStart, newTotalCount, spent, lockKey, stock['currentStock']['name'],
+                            newTotalInvestedSek, tickerId)
 
                         break
                     
             except Exception as ex:
-                print(f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
+                log.log(LogType.Trace, f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
             finally:
                 self.unlockStock(yahooTicker, lockKey)
 
@@ -118,45 +114,41 @@ class MainBroker:
 
         WAIT_SEC_FOR_COMPLETION = 3
 
-        if transactionType == TransactionType.Buy:
-            orderType = OrderType.BUY
-        else:
-            orderType = OrderType.SELL
+        infoString = f"{yahooTicker}: tickerId: {tickerId}, transaction: {transactionType}, accountId {accountId}, price: {price}, volume {volume}, expectedWhenDone: {expectedWhenDone}, countAtStart: {countAtStart}"
+        log.log(LogType.Audit, f"Placing Avanza order: {infoString}")
 
-        retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, orderType, price, volume)
-        time.sleep(1)
+        retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, transactionType, price, volume)
 
         if retVal['status'] != "SUCCESS":
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
-            raise RuntimeError(f"{yahooTicker}: Could not place order {orderType} towards avanza, {retVal}, accountId {accountId}, price: {price}, volume {volume}")
+            log.log(LogType.Audit, f"Could not place Avanza order: {retVal}, {infoString}")
+            raise RuntimeError()
 
         for a in range(WAIT_SEC_FOR_COMPLETION):
             avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
             if avanzaDetails['currentCount'] == expectedWhenDone:
-                print(f"{yahooTicker} Stock successfully transacted {orderType}, volume {volume}")
+                log.log(LogType.Audit, f"(1) Avanza order succesfull: {infoString}")
                 return avanzaDetails['currentCount']
 
-            print(f"{yahooTicker} {orderType} order is on market.. Waiting...")
-            sys.stdout.flush()
+            log.log(LogType.Trace, f"{yahooTicker} {transactionType} order is on market.. Waiting...")
             time.sleep(1)
 
-        print(f"{yahooTicker} {orderType} Failed to transact stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
+        log.log(LogType.Trace, f"{yahooTicker} {transactionType} Failed to transact stock in {WAIT_SEC_FOR_COMPLETION} seconds. deleting order")
 
         try:
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
         except Exception:
-            print("Could not delete order... Ignoring")
+            log.log(LogType.Trace, "Could not delete order... Ignoring")
 
-        sys.stdout.flush()
         time.sleep(1)
         avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
         if avanzaDetails['currentCount'] == expectedWhenDone:
-            print(f"{yahooTicker} {orderType} Successfully transacted, volume {volume}")
+            log.log(LogType.Audit, f"(2) Avanza order succesfull: {infoString}")
         elif avanzaDetails['currentCount'] == countAtStart:
-            print(f"{yahooTicker} {orderType} No stocks transacted")
+            log.log(LogType.Audit, f"No stocks transacted: {infoString}")
         else:
-            print(f"{yahooTicker} {orderType} partly transacted. Current: {avanzaDetails['currentCount']}, before: {countAtStart} out of {volume}")
+            log.log(LogType.Audit, f"Avanza order partly transacted. Current: {avanzaDetails['currentCount']}: {infoString}")
 
         return avanzaDetails['currentCount']
 
@@ -174,7 +166,7 @@ class MainBroker:
         else:
             newVal = float("%.4f" % (lastPrice - avanzaDetails['tick1Percent']))
 
-        print(f"Changing bidValue: {transactionType} / from {lastPrice} to {newVal}")
+        log.log(LogType.Trace, f"Changing bidValue: {transactionType} / from {lastPrice} to {newVal}")
         return newVal
 
 
@@ -212,8 +204,8 @@ class MainBroker:
         try:
             self.avanzaHandler.testAvanzaConnection()
         except Exception:
-            print("Need to refresh AvanzaHandler...")
-            self.avanzaHandler = AvanzaHandler.AvanzaHandler()
+            log.log(LogType.Trace, "Need to refresh AvanzaHandler...")
+            self.avanzaHandler = AvanzaHandler()
             self.avanzaHandler.testAvanzaConnection()
 
         self.resetEvent(EventType.AvanzaErrors)
@@ -223,20 +215,18 @@ class MainBroker:
     # ##############################################################################################################
     def run(self):
 
-        print("Starting up, test connections to trading pal algorithm...")
+        log.log(LogType.Audit, "Starting up, test connections to trading pal algorithm...")
 
         self.waitForConnectonToTradingPal()
 
         while True:
             if not self.marketsOpenDaytime():
-                print("Markets closed...")
-                sys.stdout.flush()
+                log.log(LogType.Trace, "Markets closed...")
                 time.sleep(120)
                 continue
 
             if not self.isEventAllowed(EventType.AvanzaTransaction) or not self.isEventAllowed(EventType.AvanzaErrors):
-                print(f"To many events in one day. Stepping back... {self.events}")
-                sys.stdout.flush()
+                log.log(LogType.Audit, f"To many events in one day. Stepping back... {self.events}")
                 time.sleep(3600)
                 continue
 
@@ -244,21 +234,18 @@ class MainBroker:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
                 if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
                     self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
-                    sys.stdout.flush()
                     time.sleep(120)
             except Exception as ex:
-                print(f"Exception during buy, {ex}")
+                log.log(LogType.Trace, f"Exception during buy, {ex}")
 
             try:
                 stocksToSell = self.fetchTickers(SELL_PATH)
                 if stocksToSell is not None and len(stocksToSell['list']) > 0:
                     self.doStocksTransaction(stocksToSell['list'], TransactionType.Sell)
-                    sys.stdout.flush()
                     time.sleep(120)
             except Exception as ex:
-                print(f"Exception during sell, {ex}")
+                log.log(LogType.Trace, f"Exception during sell, {ex}")
 
-            sys.stdout.flush()
             time.sleep(60)
 
     # ##############################################################################################################
@@ -267,12 +254,11 @@ class MainBroker:
     def waitForConnectonToTradingPal(self):
         while True:
             if self.fetchTickers(BUY_PATH) is not None:
-                print("Connection to trading pal algorithm OK!")
+                log.log(LogType.Trace, "Connection to trading pal algorithm OK!")
                 break
             else:
-                print(f"Connection to tradingpal is still no OK. Retrying...")
-                sys.stdout.flush()
-                time.sleep(5)
+                log.log(LogType.Trace, f"Connection to tradingpal is still not OK. Retrying...")
+                time.sleep(15)
 
     # ##############################################################################################################
     # ...
@@ -282,8 +268,7 @@ class MainBroker:
         try:
             retData = requests.get(BASEURL + path)
             if retData.status_code != 200:
-                print(f"{datetime.datetime.utcnow()} Failed to fetch stocks... retrying")
-                sys.stdout.flush()
+                log.log(LogType.Trace, f"{datetime.datetime.utcnow()} Failed to fetch stocks... retrying")
                 time.sleep(60)
 
             dataAsJson = json.loads(retData.content)
@@ -292,18 +277,18 @@ class MainBroker:
             if self.buySellHash[path] == newHash:
                 return None
             else:
-                print("Updated prices!!")
+                log.log(LogType.Trace, "Updated prices!!")
                 self.buySellHash[path] = newHash
                 return dataAsJson
 
         except Exception as ex:
-            print(f"{datetime.datetime.utcnow()} Failed to fetch tickers: {ex}")
+            log.log(LogType.Trace, f"{datetime.datetime.utcnow()} Failed to fetch tickers: {ex}")
             return None
 
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def updateStock(self, tickerName: str, boughtAt, soldAt, count: int, lockKey: int, name: str, totalInvestedSek: int):
+    def updateStock(self, tickerName: str, boughtAt, soldAt, countAtStart: int, count: int, spent: int, lockKey: int, name: str, totalInvestedSek: int, tickerId):
 
         body = {
             'ticker': tickerName,
@@ -315,15 +300,18 @@ class MainBroker:
             'totalInvestedSek': totalInvestedSek,
         }
 
-        print(f"Saving stock data: {body}")
-
         try:
             retData = requests.post(BASEURL + "updateStock", json=body)
             if retData.status_code != 200:
                 raise RuntimeError(f"Failed to update stock {tickerName}, {retData.content}")
         except Exception as ex:
-            print(f"Failed to update stock {tickerName}, {ex}")
+            log.log(LogType.Trace, f"Failed to update stock {tickerName}, {ex}")
             raise ex
+        finally:
+            body['countAtStart'] = countAtStart
+            body['spent'] = spent
+            body['avanzaTickerId'] = tickerId
+            log.log(LogType.Register, body)
 
     # ##############################################################################################################
     # ...
@@ -336,7 +324,7 @@ class MainBroker:
                 raise RuntimeError(f"Failed to lock stock {ticker}, {retData.content}")
             return json.loads(retData.content)['lockKey']
         except Exception as ex:
-            print(f"Failed to lock stock {ticker}, {ex}")
+            log.log(LogType.Trace, f"Failed to lock stock {ticker}, {ex}")
             raise ex
 
     # ##############################################################################################################
@@ -352,7 +340,7 @@ class MainBroker:
             if retData.status_code != 200:
                 raise RuntimeError(f"Failed to unlock stock {ticker}, {retData.content}")
         except Exception as ex:
-            print(f"Failed to unlock stock {ticker}, {ex}")
+            log.log(LogType.Trace, f"Failed to unlock stock {ticker}, {ex}")
             raise ex
 
     # ##############################################################################################################
