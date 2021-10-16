@@ -6,7 +6,7 @@ from avanza import OrderType
 # Proper log function to file
 #
 
-BASEURL = "http://localhost:5000/tradingpal/"
+BASEURL = "http://192.168.1.50:5000/tradingpal/"
 BUY_PATH = "getStocksToBuy"
 SELL_PATH = "getStocksToSell"
 
@@ -261,6 +261,9 @@ class MainBroker:
             sys.stdout.flush()
             time.sleep(60)
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def waitForConnectonToTradingPal(self):
         while True:
             if self.fetchTickers(BUY_PATH) is not None:
@@ -268,6 +271,7 @@ class MainBroker:
                 break
             else:
                 print(f"Connection to tradingpal is still no OK. Retrying...")
+                sys.stdout.flush()
                 time.sleep(5)
 
     # ##############################################################################################################
