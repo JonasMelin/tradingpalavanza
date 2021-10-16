@@ -5,7 +5,7 @@ RUN pip install pytz==2020.5
 RUN pip install avanza-api==2.8.0
 RUN pip list
 
-ADD AvanzaHandler.py MainBroker.py /
+ADD AvanzaHandler.py MainBroker.py Logger.py /
 
 ENTRYPOINT ["python3","/MainBroker.py"]
 
