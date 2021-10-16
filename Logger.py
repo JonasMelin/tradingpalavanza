@@ -1,5 +1,6 @@
 import enum, datetime, pytz, sys
 
+tradeRegisterPath = "/logs/tradingPalRegistertLog.txt"
 auditLogPath = "/logs/tradingPalAuditLog.txt"
 traceLogPath = "/logs/traingPalTraceLog.txt"
 
@@ -15,16 +16,14 @@ class Log:
 
     def log(self, logType: LogType, data):
 
-        if logType == LogType.Register:
-            self._registerToMongo(data)
-        else:
-            self._logText(logType, data)
-
-    def _logText(self, logType: LogType, text: str):
-
+        text = str(data)
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - {text}")
         sys.stdout.flush()
 
+        if logType == LogType.Register:
+            self._logToFile(tradeRegisterPath, text)
+            self._logToFile(auditLogPath, text)
+            self._logToFile(traceLogPath, text)
         if logType == LogType.Audit:
             self._logToFile(auditLogPath, text)
             self._logToFile(traceLogPath, text)
@@ -40,12 +39,6 @@ class Log:
                 print(f"Could not log to {path}, {ex}")
                 sys.stdout.flush()
                 self.errorMessgeFilePrinted = True
-
-
-    def _registerToMongo(self, data: map):
-
-        self._logText(LogType.Audit, "Register to Db: " + str(data))
-
 
 if __name__ == "__main__":
     l = Log()
