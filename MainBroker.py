@@ -290,6 +290,7 @@ class MainBroker:
             'lockKey': lockKey,
             'name': name,
             'totalInvestedSek': totalInvestedSek,
+            'tradedByBot': True
         }
 
         try:
