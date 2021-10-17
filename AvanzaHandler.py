@@ -4,8 +4,6 @@ from Logger import Log, LogType
 
 passwordPaths = ["./passwords.json", "/passwords/passwords.json"]
 
-log = Log()
-
 class TransactionType(enum.Enum):
    Buy = 1
    Sell = 2
@@ -18,7 +16,8 @@ class AvanzaHandler:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def __init__(self):
+    def __init__(self, log):
+        self.log = log
         self.avanzaTestedOk = False
         self.credentials = {}
         self.readPasswordsFromFile()
@@ -43,7 +42,7 @@ class AvanzaHandler:
             raise RuntimeError(f"Please provide a json file in some of the paths ({passwordPaths}) \
             with keys: \'username\', \'password\' and \'totpSecret\'")
 
-        log.log(LogType.Trace, "Successfully read credentials from file...")
+        self.log.log(LogType.Trace, "Successfully read credentials from file...")
 
 
     # ##############################################################################################################
@@ -63,7 +62,7 @@ class AvanzaHandler:
         self.avanza.get_overview()
 
         if not self.avanzaTestedOk:
-            log.log(LogType.Trace, "Connection to Avanza is OK!")
+            self.log.log(LogType.Trace, "Connection to Avanza is OK!")
             self.avanzaTestedOk = True
 
     # ##############################################################################################################
@@ -76,25 +75,25 @@ class AvanzaHandler:
         retval = self.avanza.search_for_stock(tickerPart)
 
         if retval['totalNumberOfHits'] == 0:
-            log.log(LogType.Trace, f"WARN: Could not lookup tickerId for ticker: {yahooTicker}")
+            self.log.log(LogType.Trace, f"WARN: Could not lookup tickerId for ticker: {yahooTicker}")
             return None
 
         for allHitTypes in retval['hits']:
             if 'topHits' not in allHitTypes:
-                log.log(LogType.Trace, f"WARN: topHits missing in reply from avanza: {yahooTicker}")
+                self.log.log(LogType.Trace, f"WARN: topHits missing in reply from avanza: {yahooTicker}")
                 return None
 
             for topHit in allHitTypes['topHits']:
 
                 if 'tickerSymbol' not in topHit or 'flagCode' not in topHit or 'id' not in topHit or 'name' not in topHit:
-                    log.log(LogType.Trace, f"WARN: 'tickerSymbol', 'flagCode', 'id' or 'name' missing in reply from avanza: ticker: {yahooTicker}, topHit: {topHit}")
+                    self.log.log(LogType.Trace, f"WARN: 'tickerSymbol', 'flagCode', 'id' or 'name' missing in reply from avanza: ticker: {yahooTicker}, topHit: {topHit}")
                     return None
 
                 if tickerPart == topHit['tickerSymbol'] and flagCode == topHit['flagCode']:
-                    log.log(LogType.Trace, f"Translating {yahooTicker} -> {topHit['tickerSymbol']} / {topHit['flagCode']} / {topHit['name']} (id: {topHit['id']})")
+                    self.log.log(LogType.Trace, f"Translating {yahooTicker} -> {topHit['tickerSymbol']} / {topHit['flagCode']} / {topHit['name']} (id: {topHit['id']})")
                     return topHit['id']
 
-        log.log(LogType.Trace, f"WARN: Failed to lookup ticker {yahooTicker}")
+        self.log.log(LogType.Trace, f"WARN: Failed to lookup ticker {yahooTicker}")
         return None
 
     # ##############################################################################################################
@@ -127,7 +126,7 @@ class AvanzaHandler:
         try:
             data = self.avanza.get_stock_info(tickerId)
         except Exception as ex:
-            log.log(LogType.Trace, f"Could not get stock info, id {tickerId}, {ex}")
+            self.log.log(LogType.Trace, f"Could not get stock info, id {tickerId}, {ex}")
             raise ex
 
         try:
@@ -158,7 +157,7 @@ class AvanzaHandler:
             return retData
 
         except Exception as ex:
-            log.log(LogType.Trace, f"Could not extract stock info, id {tickerId}, {ex}")
+            self.log.log(LogType.Trace, f"Could not extract stock info, id {tickerId}, {ex}")
             raise ex
 
     # ##############################################################################################################
@@ -195,7 +194,7 @@ class AvanzaHandler:
         prices = sorted(prices)
 
         if len(prices) < 2:
-            log.log(LogType.Trace, "Could not get tick size")
+            self.log.log(LogType.Trace, "Could not get tick size")
             return -1
 
         tickSize = 100000.0
@@ -219,14 +218,14 @@ class AvanzaHandler:
         else:
             orderType = OrderType.SELL
 
-        log.log(LogType.Trace, f"placing order... {yahooTicker}/{self.yahooTickerToAvanzaTicker(yahooTicker)}, accountId: {accountId}, tickerId: {tickerId}, {orderType}, price: {price}, volume: {volume}")
+        self.log.log(LogType.Trace, f"placing order... {yahooTicker}/{self.yahooTickerToAvanzaTicker(yahooTicker)}, accountId: {accountId}, tickerId: {tickerId}, {orderType}, price: {price}, volume: {volume}")
 
         if self.STUB_BUY:
             return {
                 "messages": [],
                 "orderId": "1234",
                 "requestId": "3241",
-                "status": "OK"
+                "status": "SUCCESS"
             }
 
         result = self.avanza.place_order(
@@ -266,7 +265,7 @@ class AvanzaHandler:
         flagCode = 'US'
 
         if yahooTicker is None:
-            log.log(LogType.Trace, "WARN: Provided None as ticker in tickerToId")
+            self.log.log(LogType.Trace, "WARN: Provided None as ticker in tickerToId")
             return None
 
         if '.' in yahooTicker:

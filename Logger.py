@@ -16,19 +16,24 @@ class Log:
 
     def log(self, logType: LogType, data):
 
+        typeChar = '?'
         text = str(data)
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - {text}")
-        sys.stdout.flush()
 
         if logType == LogType.Register:
+            typeChar = 'R'
             self._logToFile(tradeRegisterPath, text)
             self._logToFile(auditLogPath, text)
             self._logToFile(traceLogPath, text)
         if logType == LogType.Audit:
+            typeChar = 'A'
             self._logToFile(auditLogPath, text)
             self._logToFile(traceLogPath, text)
         if logType == LogType.Trace:
+            typeChar = 'T'
             self._logToFile(traceLogPath, text)
+
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - ({typeChar}) {text}")
+        sys.stdout.flush()
 
     def _logToFile(self, path: str, text: str):
         try:

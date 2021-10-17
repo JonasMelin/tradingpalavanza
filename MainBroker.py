@@ -24,7 +24,8 @@ log = Log()
 
 class EventType(enum.Enum):
     AvanzaTransaction = 1,
-    AvanzaErrors = 2
+    AvanzaErrors = 2,
+    Exception = 3
 
 class MainBroker:
 
@@ -35,11 +36,6 @@ class MainBroker:
 
         self.resetEventCounters()
         self.refreshAvanzaHandler()
-
-        self.buySellHash = {
-            BUY_PATH: 0,
-            SELL_PATH: 0
-        }
 
     # ##############################################################################################################
     # ...
@@ -59,10 +55,11 @@ class MainBroker:
                 avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
 
                 if avanzaDetails is None:
-                    log.log(LogType.Trace, f"WARN: could not find ticker in avanza: {yahooTicker}")
+                    raise RuntimeWarning(f"WARN: could not find ticker in avanza: {yahooTicker}")
+
+                if self.sanityCheckStock(avanzaDetails, stock) == -1:
                     continue
 
-                self.sanityCheckStock(avanzaDetails, stock)
                 self.addEvent(EventType.AvanzaTransaction)
 
                 countAtStart = avanzaDetails['currentCount']
@@ -103,6 +100,7 @@ class MainBroker:
                         break
                     
             except Exception as ex:
+                self.addEvent(EventType.Exception)
                 log.log(LogType.Trace, f"Could not buy stock {stock['currentStock']['name']}/{yahooTicker}, {ex}")
             finally:
                 self.unlockStock(yahooTicker, lockKey)
@@ -120,8 +118,8 @@ class MainBroker:
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, transactionType, price, volume)
 
         if retVal['status'] != "SUCCESS":
-            self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
             log.log(LogType.Audit, f"Could not place Avanza order: {retVal}, {infoString}")
+            self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
             raise RuntimeError()
 
         for a in range(WAIT_SEC_FOR_COMPLETION):
@@ -152,9 +150,9 @@ class MainBroker:
 
         return avanzaDetails['currentCount']
 
-        # ##############################################################################################################
-        # get sell price from best price (priceLevel == 1) to worst price (priceLevel == ~4)
-        # ##############################################################################################################
+    # ##############################################################################################################
+    # get sell price from best price (priceLevel == 1) to worst price (priceLevel == ~4)
+    # ##############################################################################################################
 
     def getNewStockPrice(self, transactionType :TransactionType, avanzaDetails, lastPrice: int):
 
@@ -205,7 +203,7 @@ class MainBroker:
             self.avanzaHandler.testAvanzaConnection()
         except Exception:
             log.log(LogType.Trace, "Need to refresh AvanzaHandler...")
-            self.avanzaHandler = AvanzaHandler()
+            self.avanzaHandler = AvanzaHandler(log)
             self.avanzaHandler.testAvanzaConnection()
 
         self.resetEvent(EventType.AvanzaErrors)
@@ -225,7 +223,7 @@ class MainBroker:
                 time.sleep(120)
                 continue
 
-            if not self.isEventAllowed(EventType.AvanzaTransaction) or not self.isEventAllowed(EventType.AvanzaErrors):
+            if not self.areAllEventsOk():
                 log.log(LogType.Audit, f"To many events in one day. Stepping back... {self.events}")
                 time.sleep(3600)
                 continue
@@ -236,6 +234,7 @@ class MainBroker:
                     self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
                     time.sleep(120)
             except Exception as ex:
+                self.addEvent(EventType.Exception)
                 log.log(LogType.Trace, f"Exception during buy, {ex}")
 
             try:
@@ -244,6 +243,7 @@ class MainBroker:
                     self.doStocksTransaction(stocksToSell['list'], TransactionType.Sell)
                     time.sleep(120)
             except Exception as ex:
+                self.addEvent(EventType.Exception)
                 log.log(LogType.Trace, f"Exception during sell, {ex}")
 
             time.sleep(60)
@@ -267,20 +267,12 @@ class MainBroker:
 
         try:
             retData = requests.get(BASEURL + path)
+
             if retData.status_code != 200:
                 log.log(LogType.Trace, f"{datetime.datetime.utcnow()} Failed to fetch stocks... retrying")
-                time.sleep(60)
+                time.sleep(20)
 
-            dataAsJson = json.loads(retData.content)
-            newHash = hash(str(dataAsJson["list"]))
-
-            if self.buySellHash[path] == newHash:
-                return None
-            else:
-                log.log(LogType.Trace, "Updated prices!!")
-                self.buySellHash[path] = newHash
-                return dataAsJson
-
+            return json.loads(retData.content)
         except Exception as ex:
             log.log(LogType.Trace, f"{datetime.datetime.utcnow()} Failed to fetch tickers: {ex}")
             return None
@@ -361,7 +353,8 @@ class MainBroker:
         self.events = {
             "day": datetime.datetime.now(pytz.timezone('Europe/Stockholm')).day,
             EventType.AvanzaTransaction: {"count": 0, "maxAllowed": 10},
-            EventType.AvanzaErrors: {"count": 0, "maxAllowed": 10}
+            EventType.AvanzaErrors: {"count": 0, "maxAllowed": 10},
+            EventType.Exception: {"count": 0, "maxAllowed": 20}
         }
 
     # ##############################################################################################################
@@ -398,6 +391,18 @@ class MainBroker:
 
         self.refreshEventCounter()
         return self.events[event]['count'] <= self.events[event]['maxAllowed']
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def areAllEventsOk(self):
+        for event, data in self.events.items():
+
+            if event in EventType:
+                if not self.isEventAllowed(event):
+                    return False
+
+        return True
 
 
 # ##############################################################################################################
