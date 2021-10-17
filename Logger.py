@@ -13,6 +13,7 @@ class Log:
 
     def __init__(self):
         self.errorMessgeFilePrinted = False
+        self.lastHash = 0
 
     def log(self, logType: LogType, data):
 
@@ -23,7 +24,12 @@ class Log:
         else:
             typeChar = 'T'
 
-        text = f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - ({typeChar}) {str(data)}"
+        textNoDate = f"({typeChar}) {str(data)}"
+        newHash = hash(textNoDate)
+        text = f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - {textNoDate}"
+        if newHash == self.lastHash and logType == logType.Trace: # If trace log, only log one if log is identical to prior
+            return
+
         print(text)
         sys.stdout.flush()
 
@@ -37,6 +43,8 @@ class Log:
         if logType == LogType.Trace:
             self._logToFile(traceLogPath, text)
 
+        self.lastHash = newHash
+
     def _logToFile(self, path: str, text: str):
         try:
             with open(path, "a") as file_object:
@@ -49,6 +57,9 @@ class Log:
 
 if __name__ == "__main__":
     l = Log()
+    l.log(LogType.Audit, "auditLog") # All audits shall appear
     l.log(LogType.Audit, "auditLog")
+    l.log(LogType.Trace, "traceLog") # Only one trace should appear
     l.log(LogType.Trace, "traceLog")
+    l.log(LogType.Register, {"column": "data"}) # All registers shall appear
     l.log(LogType.Register, {"column": "data"})
