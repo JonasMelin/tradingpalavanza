@@ -2,7 +2,7 @@ import enum, datetime, pytz, sys
 
 tradeRegisterPath = "/logs/tradingPalRegistertLog.txt"
 auditLogPath = "/logs/tradingPalAuditLog.txt"
-traceLogPath = "/logs/traingPalTraceLog.txt"
+traceLogPath = "/logs/tradingPalTraceLog.txt"
 
 class LogType(enum.Enum):
     Trace = 1
@@ -16,24 +16,26 @@ class Log:
 
     def log(self, logType: LogType, data):
 
-        typeChar = '?'
-        text = str(data)
-
         if logType == LogType.Register:
             typeChar = 'R'
+        elif logType == logType.Audit:
+            typeChar = 'A'
+        else:
+            typeChar = 'T'
+
+        text = f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - ({typeChar}) {str(data)}"
+        print(text)
+        sys.stdout.flush()
+
+        if logType == LogType.Register:
             self._logToFile(tradeRegisterPath, text)
             self._logToFile(auditLogPath, text)
             self._logToFile(traceLogPath, text)
         if logType == LogType.Audit:
-            typeChar = 'A'
             self._logToFile(auditLogPath, text)
             self._logToFile(traceLogPath, text)
         if logType == LogType.Trace:
-            typeChar = 'T'
             self._logToFile(traceLogPath, text)
-
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} - ({typeChar}) {text}")
-        sys.stdout.flush()
 
     def _logToFile(self, path: str, text: str):
         try:
