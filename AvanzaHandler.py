@@ -89,7 +89,7 @@ class AvanzaHandler:
                     self.log.log(LogType.Trace, f"WARN: 'tickerSymbol', 'flagCode', 'id' or 'name' missing in reply from avanza: ticker: {yahooTicker}, topHit: {topHit}")
                     return None
 
-                if tickerPart == topHit['tickerSymbol'] and flagCode == topHit['flagCode']:
+                if tickerPart.lower() == topHit['tickerSymbol'].lower() and flagCode.lower() == topHit['flagCode'].lower():
                     self.log.log(LogType.Trace, f"Translating {yahooTicker} -> {topHit['tickerSymbol']} / {topHit['flagCode']} / {topHit['name']} (id: {topHit['id']})")
                     return topHit['id']
 
