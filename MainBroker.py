@@ -92,8 +92,8 @@ class MainBroker:
                         newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + spent)
                         self.updateStock(
                             yahooTicker,
-                            price if transactionType == TransactionType.Buy else None,
-                            price if transactionType == TransactionType.Sell else None,
+                            startPrice if transactionType == TransactionType.Buy else None,
+                            startPrice if transactionType == TransactionType.Sell else None,
                             countAtStart, newTotalCount, spent, lockKey, stock['currentStock']['name'],
                             newTotalInvestedSek, tickerId)
 
