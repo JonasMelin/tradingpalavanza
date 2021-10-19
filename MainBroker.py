@@ -66,10 +66,8 @@ class MainBroker:
 
                 if transactionType == TransactionType.Sell:
                     price = avanzaDetails["buyPrice"]
-                    startPrice = avanzaDetails["buyPrice"]
                 else:
                     price = avanzaDetails["sellPrice"]
-                    startPrice = avanzaDetails["sellPrice"]
 
                 for a in range(3):
 
@@ -88,13 +86,16 @@ class MainBroker:
                                                                         price, numberToTransact)
 
                     if newTotalCount != countAtStart:
-                        spent = (newTotalCount - countAtStart) * startPrice
-                        newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + spent)
+                        
+                        amountTransacted = newTotalCount - countAtStart
+                        spentOrigCurr = amountTransacted * stock['priceOrigCurrancy']
+                        spentSek = stock['singleStockPriceSek'] * amountTransacted
+                        newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + spentSek)
                         self.updateStock(
                             yahooTicker,
-                            startPrice if transactionType == TransactionType.Buy else None,
-                            startPrice if transactionType == TransactionType.Sell else None,
-                            countAtStart, newTotalCount, spent, lockKey, stock['currentStock']['name'],
+                            spentOrigCurr if transactionType == TransactionType.Buy else None,
+                            spentOrigCurr if transactionType == TransactionType.Sell else None,
+                            countAtStart, newTotalCount, spentSek, lockKey, stock['currentStock']['name'],
                             newTotalInvestedSek, tickerId)
 
                         break
@@ -227,6 +228,8 @@ class MainBroker:
                 log.log(LogType.Audit, f"To many events in one day. Stepping back... {self.events}")
                 time.sleep(3600)
                 continue
+
+            log.log(LogType.Trace, "Checking for stocks to buy/sell...")
 
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
