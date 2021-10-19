@@ -17,6 +17,7 @@ class AvanzaHandler:
     # ...
     # ##############################################################################################################
     def __init__(self, log):
+        self.tickerIdCache = {}
         self.log = log
         self.avanzaTestedOk = False
         self.credentials = {}
@@ -70,6 +71,9 @@ class AvanzaHandler:
     # ##############################################################################################################
     def tickerToId(self, yahooTicker: str):
 
+        if yahooTicker in self.tickerIdCache:
+            return self.tickerIdCache[yahooTicker]
+
         tickerPart, flagCode = self.yahooTickerToAvanzaTicker(yahooTicker)
 
         retval = self.avanza.search_for_stock(tickerPart)
@@ -91,6 +95,7 @@ class AvanzaHandler:
 
                 if tickerPart.lower() == topHit['tickerSymbol'].lower() and flagCode.lower() == topHit['flagCode'].lower():
                     self.log.log(LogType.Trace, f"Translating {yahooTicker} -> {topHit['tickerSymbol']} / {topHit['flagCode']} / {topHit['name']} (id: {topHit['id']})")
+                    self.tickerIdCache[yahooTicker] = topHit['id']
                     return topHit['id']
 
         self.log.log(LogType.Trace, f"WARN: Failed to lookup ticker {yahooTicker}")

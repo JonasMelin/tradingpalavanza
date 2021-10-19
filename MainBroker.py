@@ -236,8 +236,6 @@ class MainBroker:
                 time.sleep(3600)
                 continue
 
-            log.log(LogType.Trace, "Checking for stocks to buy/sell...")
-
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
                 if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
