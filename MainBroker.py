@@ -99,13 +99,13 @@ class MainBroker:
 
             if newTotalCount != countAtStart:
                 amountTransacted = newTotalCount - countAtStart
-                spentOrigCurr = amountTransacted * stock['priceOrigCurrancy']
                 spentSek = stock['singleStockPriceSek'] * amountTransacted
                 newTotalInvestedSek = int(stock['currentStock']['totalInvestedSek'] + spentSek)
+
                 self.updateStock(
                     yahooTicker,
-                    spentOrigCurr if transactionType == TransactionType.Buy else None,
-                    spentOrigCurr if transactionType == TransactionType.Sell else None,
+                    stock['priceOrigCurrancy'] if transactionType == TransactionType.Buy else None,
+                    stock['priceOrigCurrancy'] if transactionType == TransactionType.Sell else None,
                     countAtStart, newTotalCount, spentSek, lockKey, stock['currentStock']['name'],
                     newTotalInvestedSek, tickerId)
 
@@ -288,7 +288,7 @@ class MainBroker:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def updateStock(self, tickerName: str, boughtAt, soldAt, countAtStart: int, count: int, spent: int, lockKey: int, name: str, totalInvestedSek: int, tickerId):
+    def updateStock(self, tickerName: str, boughtAt: float, soldAt: float, countAtStart: int, count: int, spent: int, lockKey: int, name: str, totalInvestedSek: int, tickerId):
 
         body = {
             'ticker': tickerName,
