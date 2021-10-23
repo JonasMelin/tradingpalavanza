@@ -16,6 +16,8 @@ MAX_SANITY_QUOTA_SELL_BUY = 1.12
 # Note that we get delayed prices 15 minutes. ToDo: Fix this depending upon market...
 MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 1200
 
+MAX_ALLOWED_TRANSACTION_SIZE_SEK = 3000
+
 # Define during what hours transactions shall be attempted.
 MARKET_OPEN_HOUR = 9
 MARKET_CLOSE_HOUR = 23
@@ -55,7 +57,7 @@ class MainBroker:
                 if avanzaDetails is None:
                     raise RuntimeWarning(f"WARN: could not find ticker in avanza: {yahooTicker}")
 
-                sanityStatus = self.sanityCheckStock(avanzaDetails, stock)
+                sanityStatus = self.sanityCheckStock(avanzaDetails, stock, transactionType)
 
                 if sanityStatus != None:
                     log.log(LogType.Trace, f"Sanity check failed: {stock['currentStock']['name']} / {sanityStatus}")
@@ -177,10 +179,17 @@ class MainBroker:
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def sanityCheckStock(self, avanzaDetails, tradingPalDetails):
+    def sanityCheckStock(self, avanzaDetails, tradingPalDetails, transactionType):
 
         sellPrice = avanzaDetails['sellPrice']
         buyPrice = avanzaDetails['buyPrice']
+        avgPriceAvanza = (sellPrice + buyPrice) / 2
+        priceFromTradingPal = tradingPalDetails['priceOrigCurrancy']
+
+        if transactionType == TransactionType.Buy:
+            numberToTransact = tradingPalDetails["numberToBuy"]
+        else:
+            numberToTransact = tradingPalDetails["numberToSell"]
 
         if sellPrice is None or buyPrice is None:
             raise RuntimeError(f"buy/sell price is None")
@@ -191,6 +200,10 @@ class MainBroker:
             return f"buy / sell data missing for stock. Market probably closed"
         if sellPrice < 0.01 or sellPrice > 5000.0 or buyPrice < 0.01 or buyPrice > 5000.0:
             raise RuntimeError(f"Stock sell / buy price is not reasonable {sellPrice} / {buyPrice}")
+        if priceFromTradingPal < (0.9 * avgPriceAvanza) or priceFromTradingPal > (1.1 * avgPriceAvanza):
+            raise RuntimeError(f"Stock price from tradingpal differs to much from avanza price. avanza: {avgPriceAvanza}, tradingPal: {priceFromTradingPal}")
+        if (tradingPalDetails['singleStockPriceSek'] * numberToTransact) > MAX_ALLOWED_TRANSACTION_SIZE_SEK:
+            raise RuntimeError(f"Transaction to big!! single stock price SEK: {tradingPalDetails['singleStockPriceSek']}, numberToTransact: {numberToTransact}")
         if buyPrice > sellPrice:
             raise RuntimeError(f"buyPrice {buyPrice} is less than sellPrice {sellPrice}")
         if (sellPrice / buyPrice) > MAX_SANITY_QUOTA_SELL_BUY:
