@@ -260,7 +260,7 @@ class AvanzaHandler:
     # ##############################################################################################################
     def generateOrderValidDate(self):
         now = datetime.datetime.now(pytz.timezone('Europe/Stockholm'))
-        return f"{now.year}-{now.month}-{now.day}"
+        return f"{now.year}-{now.month:02}-{now.day:02}"
 
     # ##############################################################################################################
     # ...
