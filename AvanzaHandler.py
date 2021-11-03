@@ -1,8 +1,16 @@
 import datetime, pytz, os, json, enum
 from avanza import Avanza, OrderType
-from Logger import Log, LogType
+from Logger import LogType
 
 passwordPaths = ["./passwords.json", "/passwords/passwords.json"]
+
+PRODUCTION = os.getenv('TP_PROD')
+
+if PRODUCTION is not None and PRODUCTION == "true":
+    print("RUNNING IN PRODUCTION MODE!!")
+else:
+    print("Running in dev mode cause environment variable \"TP_PROD=true\" was not set...")
+    PRODUCTION = None
 
 class TransactionType(enum.Enum):
    Buy = 1
@@ -10,7 +18,6 @@ class TransactionType(enum.Enum):
 
 class AvanzaHandler:
 
-    STUB_BUY = False
     allowedAcconts = ['Jonas KF', 'Jonas ISK']
 
     # ##############################################################################################################
@@ -225,7 +232,8 @@ class AvanzaHandler:
 
         self.log.log(LogType.Trace, f"placing order... {yahooTicker}/{self.yahooTickerToAvanzaTicker(yahooTicker)}, accountId: {accountId}, tickerId: {tickerId}, {orderType}, price: {price}, volume: {volume}")
 
-        if self.STUB_BUY:
+        if PRODUCTION is None:
+            print("DEV mode. Not placing order towards avanza...")
             return {
                 "messages": [],
                 "orderId": "1234",
