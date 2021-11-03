@@ -233,7 +233,7 @@ class AvanzaHandler:
         self.log.log(LogType.Trace, f"placing order... {yahooTicker}/{self.yahooTickerToAvanzaTicker(yahooTicker)}, accountId: {accountId}, tickerId: {tickerId}, {orderType}, price: {price}, volume: {volume}")
 
         if PRODUCTION is None:
-            print("DEV mode. Not placing order towards avanza...")
+            self.log.log(LogType.Trace, "DEV mode. Not placing order towards avanza...")
             return {
                 "messages": [],
                 "orderId": "1234",
