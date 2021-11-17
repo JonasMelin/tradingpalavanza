@@ -225,6 +225,7 @@ class MainBroker:
         except Exception:
             log.log(LogType.Trace, "Need to refresh AvanzaHandler...")
             self.avanzaHandler = AvanzaHandler(log)
+            self.avanzaHandler.init()
             self.avanzaHandler.testAvanzaConnection()
 
         self.resetEvent(EventType.AvanzaErrors)

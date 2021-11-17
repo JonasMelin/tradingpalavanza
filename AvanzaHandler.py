@@ -1,6 +1,6 @@
 import datetime, pytz, os, json, enum
 from avanza import Avanza, OrderType
-from Logger import LogType
+from Logger import LogType, Log
 
 passwordPaths = ["./passwords.json", "/passwords/passwords.json"]
 
@@ -28,6 +28,9 @@ class AvanzaHandler:
         self.log = log
         self.avanzaTestedOk = False
         self.credentials = {}
+        self.avanza = None
+
+    def init(self):
         self.readPasswordsFromFile()
         self.login()
 
@@ -84,6 +87,7 @@ class AvanzaHandler:
         tickerPart, flagCode = self.yahooTickerToAvanzaTicker(yahooTicker)
 
         retval = self.avanza.search_for_stock(tickerPart)
+        print(f"RAW DATA search_for_stock: {retval}")
 
         if retval['totalNumberOfHits'] == 0:
             self.log.log(LogType.Trace, f"WARN: Could not lookup tickerId for ticker: {yahooTicker}")
@@ -137,6 +141,7 @@ class AvanzaHandler:
         }
         try:
             data = self.avanza.get_stock_info(tickerId)
+            print(f"RAW DATA get_stock_info: {data}")
         except Exception as ex:
             self.log.log(LogType.Trace, f"Could not get stock info, id {tickerId}, {ex}")
             raise ex
@@ -249,19 +254,48 @@ class AvanzaHandler:
             valid_until=datetime.date.fromisoformat(self.generateOrderValidDate()),
             volume = volume)
 
+        print(f"RAW DATA place_order: {result}")
+
         return result
+
+    # ##############################################################################################################
+    # ToDo: Implement
+    # ##############################################################################################################
+    def getTransactions(self, filterByDate = None):
+
+        finalResult = []
+        rawTransactions = self.avanza.get_transactions()
+        print(f"RAW DATA get_transactions: {rawTransactions}")
+
+        if rawTransactions is None or 'transactions' not in rawTransactions:
+            self.log.log(LogType.Trace, "got no transactions from Avanza or malforrmatted...")
+            return []
+
+        for transaction in rawTransactions['transactions']:
+            if 'account' not in transaction or 'name' not in transaction['account']:
+                continue
+
+            if filterByDate is not None and 'verificationDate' in transaction and filterByDate != transaction['verificationDate']:
+                continue
+
+            if transaction['account']['name'] in self.allowedAcconts:
+                finalResult.append(transaction)
+
+        return finalResult
 
     # ##############################################################################################################
     # ToDo: Implement
     # ##############################################################################################################
     def getOrderDetails(self, orderId: str):
         result = self.avanza.get_deals_and_orders()
+        print(f"RAW DATA get_deals_and_orders: {result}")
 
     # ##############################################################################################################
     # ToDo: Implement
     # ##############################################################################################################
     def deleteOrder(self, accountId: str, orderId: str):
         result = self.avanza.delete_order(accountId, orderId)
+        print(f"RAW DATA delete_order: {result}")
 
     # ##############################################################################################################
     # ...
@@ -314,13 +348,17 @@ class AvanzaHandler:
 # ...
 # ##############################################################################################################
 if __name__ == "__main__":
-    stocksBuyer = AvanzaHandler()
+    stocksBuyer = AvanzaHandler(Log())
+    stocksBuyer.init()
     stocksBuyer.testAvanzaConnection()
 
     id = stocksBuyer.tickerToId("BBD-B.TO")
     tickerDetails = stocksBuyer.getTickerDetails(id)
     print(tickerDetails)
 
+    stocksBuyer.getTransactions()
+
+"""
     id = stocksBuyer.tickerToId("CAPMAN.HE")
     tickerDetails = stocksBuyer.getTickerDetails(id)
     print(tickerDetails)
@@ -349,4 +387,5 @@ if __name__ == "__main__":
     tickerDetails = stocksBuyer.getTickerDetails(id)
     print(tickerDetails)
 
+"""
     #stocksBuyer.placeOrder("DANSKE.CO", tickerDetails['accountId'], id, OrderType.BUY, 109.71, 1)
