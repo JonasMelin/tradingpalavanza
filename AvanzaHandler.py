@@ -4,14 +4,6 @@ from Logger import LogType, Log
 
 passwordPaths = ["./passwords.json", "/passwords/passwords.json"]
 
-PRODUCTION = os.getenv('TP_PROD')
-
-if PRODUCTION is not None and PRODUCTION == "true":
-    print("RUNNING IN PRODUCTION MODE!!")
-else:
-    print("Running in dev mode cause environment variable \"TP_PROD=true\" was not set...")
-    PRODUCTION = None
-
 class TransactionType(enum.Enum):
    Buy = 1
    Sell = 2
@@ -30,9 +22,21 @@ class AvanzaHandler:
         self.credentials = {}
         self.avanza = None
 
+        self.PRODUCTION = os.getenv('TP_PROD')
+
+        if self.PRODUCTION is not None and self.PRODUCTION == "true":
+            print("RUNNING IN PRODUCTION MODE!!")
+        else:
+            print("Running in dev mode cause environment variable \"TP_PROD=true\" was not set...")
+            self.PRODUCTION = None
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def init(self):
         self.readPasswordsFromFile()
         self.login()
+        return self
 
     # ##############################################################################################################
     # ...
@@ -55,7 +59,6 @@ class AvanzaHandler:
 
         self.log.log(LogType.Trace, "Successfully read credentials from file...")
 
-
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
@@ -77,7 +80,7 @@ class AvanzaHandler:
             self.avanzaTestedOk = True
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def tickerToId(self, yahooTicker: str):
 
@@ -85,9 +88,7 @@ class AvanzaHandler:
             return self.tickerIdCache[yahooTicker]
 
         tickerPart, flagCode = self.yahooTickerToAvanzaTicker(yahooTicker)
-
         retval = self.avanza.search_for_stock(tickerPart)
-        print(f"RAW DATA search_for_stock: {retval}")
 
         if retval['totalNumberOfHits'] == 0:
             self.log.log(LogType.Trace, f"WARN: Could not lookup tickerId for ticker: {yahooTicker}")
@@ -113,17 +114,19 @@ class AvanzaHandler:
         return None
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def secondsSinceDate(self, date: str):
         now = datetime.datetime.now(pytz.timezone('Europe/Stockholm'))
+        if ':' not in date:
+            raise RuntimeError(f"mal formatted date {date}")
         date = date[:-2] + ":00"
         dateAsDateTime = datetime.datetime.strptime(''.join(date.rsplit(':', 1)), '%Y-%m-%dT%H:%M:%S.%f%z')
         diff = now - dateAsDateTime
         return diff.seconds
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def getTickerDetails(self, tickerId: str):
 
@@ -141,7 +144,6 @@ class AvanzaHandler:
         }
         try:
             data = self.avanza.get_stock_info(tickerId)
-            print(f"RAW DATA get_stock_info: {data}")
         except Exception as ex:
             self.log.log(LogType.Trace, f"Could not get stock info, id {tickerId}, {ex}")
             raise ex
@@ -178,7 +180,7 @@ class AvanzaHandler:
             raise ex
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def guessTickSize(self, data):
 
@@ -226,7 +228,7 @@ class AvanzaHandler:
         return float("%.4f" % tickSize)
 
     # ##############################################################################################################
-    # ToDo: Implement
+    # Tested
     # ##############################################################################################################
     def placeOrder(self, yahooTicker: str, accountId: str, tickerId: str, transactionType: TransactionType, price: float, volume: int):
 
@@ -237,7 +239,7 @@ class AvanzaHandler:
 
         self.log.log(LogType.Trace, f"placing order... {yahooTicker}/{self.yahooTickerToAvanzaTicker(yahooTicker)}, accountId: {accountId}, tickerId: {tickerId}, {orderType}, price: {price}, volume: {volume}")
 
-        if PRODUCTION is None:
+        if self.PRODUCTION is None:
             self.log.log(LogType.Trace, "DEV mode. Not placing order towards avanza...")
             return {
                 "messages": [],
@@ -254,18 +256,15 @@ class AvanzaHandler:
             valid_until=datetime.date.fromisoformat(self.generateOrderValidDate()),
             volume = volume)
 
-        print(f"RAW DATA place_order: {result}")
-
         return result
 
     # ##############################################################################################################
-    # ToDo: Implement
+    # Tested!
     # ##############################################################################################################
     def getTransactions(self, filterByDate = None):
 
         finalResult = []
         rawTransactions = self.avanza.get_transactions()
-        print(f"RAW DATA get_transactions: {rawTransactions}")
 
         if rawTransactions is None or 'transactions' not in rawTransactions:
             self.log.log(LogType.Trace, "got no transactions from Avanza or malforrmatted...")
@@ -288,24 +287,23 @@ class AvanzaHandler:
     # ##############################################################################################################
     def getOrderDetails(self, orderId: str):
         result = self.avanza.get_deals_and_orders()
-        print(f"RAW DATA get_deals_and_orders: {result}")
 
     # ##############################################################################################################
-    # ToDo: Implement
+    # Tested
     # ##############################################################################################################
     def deleteOrder(self, accountId: str, orderId: str):
         result = self.avanza.delete_order(accountId, orderId)
-        print(f"RAW DATA delete_order: {result}")
+        return result
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def generateOrderValidDate(self):
         now = datetime.datetime.now(pytz.timezone('Europe/Stockholm'))
         return f"{now.year}-{now.month:02}-{now.day:02}"
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def yahooTickerToAvanzaTicker(self, yahooTicker):
         tickerPart = yahooTicker
@@ -348,8 +346,7 @@ class AvanzaHandler:
 # ...
 # ##############################################################################################################
 if __name__ == "__main__":
-    stocksBuyer = AvanzaHandler(Log())
-    stocksBuyer.init()
+    stocksBuyer = AvanzaHandler(Log()).init()
     stocksBuyer.testAvanzaConnection()
 
     id = stocksBuyer.tickerToId("BBD-B.TO")
