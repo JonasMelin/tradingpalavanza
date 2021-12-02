@@ -23,6 +23,24 @@ def testGetTransactions():
     assert retVal is not None
     assert len(retVal) == 3
 
+def testGetYieldByDate():
+    objUnderTest = AvanzaHandler(Log())
+    objUnderTest.avanza = MagicMock()
+    objUnderTest.avanza.get_transactions.return_value = getTransactionsReply
+
+    retVal = objUnderTest.getYieldByDate('2021-11-10')
+
+    assert retVal is not None and len(retVal) is 1
+
+def testGetTaxByDate():
+    objUnderTest = AvanzaHandler(Log())
+    objUnderTest.avanza = MagicMock()
+    objUnderTest.avanza.get_transactions.return_value = getTransactionsReply
+
+    retVal = objUnderTest.getTaxByDate('2021-11-08')
+
+    assert retVal is not None and len(retVal) is 1
+
 def testGetOverview():
     objUnderTest = AvanzaHandler(Log())
     objUnderTest.avanza = MagicMock()
@@ -111,6 +129,8 @@ def testDeleteOrder():
 
 if __name__ == "__main__":
     testGetTransactions()
+    testGetYieldByDate()
+    testGetTaxByDate()
     testGetOverview()
     testGetFunds()
     testplaceOrder()

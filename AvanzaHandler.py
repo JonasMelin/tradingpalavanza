@@ -259,9 +259,40 @@ class AvanzaHandler:
         return result
 
     # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getYieldByDate(self, date: str):
+        return self.getTransactionsByDateAndType(date, "DIVIDEND")
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getTaxByDate(self, date: str):
+        return self.getTransactionsByDateAndType(date, "FOREIGN_TAX")
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getTransactionsByDateAndType(self, date: str, type: str):
+
+        retData = []
+
+        try:
+            transactions = self.getTransactions(date)
+
+            for transaction in transactions:
+                if transaction['transactionType'] == type:
+                    retData.append(transaction)
+
+        except Exception as ex:
+            print(f"Could not get transaction {type} for date {date}: {ex}")
+
+        return retData
+
+    # ##############################################################################################################
     # Tested!
     # ##############################################################################################################
-    def getTransactions(self, filterByDate = None):
+    def getTransactions(self, filterByDate:str = None):
 
         finalResult = []
         rawTransactions = self.avanza.get_transactions()
