@@ -7,7 +7,7 @@ getStockInfoReply= {'priceThreeMonthsAgo': 1.54, 'priceOneWeekAgo': 1.99, 'price
 placeOrderReply = {'status': 'SUCCESS', 'messages': [''], 'orderId': '385663370', 'requestId': '-1'}
 deleteOrderReply = {'status': 'SUCCESS', 'messages': [''], 'orderId': '385663370', 'requestId': '-1'}
 searchForStockReply = {'totalNumberOfHits': 2, 'hits': [{'instrumentType': 'STOCK', 'numberOfHits': 2, 'topHits': [{'currency': 'USD', 'lastPrice': 157.29, 'changePercent': -2.05, 'flagCode': 'US', 'tradable': True, 'tickerSymbol': 'TXG', 'name': '10X Genomics Inc', 'id': '996635'}, {'currency': 'CAD', 'lastPrice': 16.32, 'changePercent': 1.68, 'flagCode': 'CA', 'tradable': True, 'tickerSymbol': 'TXG', 'name': 'Torex Gold Resources Inc', 'id': '282537'}]}]}
-
+getOverviewReply = {'accounts': [{'accountType': 'Investeringssparkonto', 'interestRate': 0.0, 'depositable': True, 'performancePercent': 28.141565920369494, 'totalProfit': 10000.89, 'performance': 15000.09999999999, 'attorney': False, 'active': True, 'accountId': '4397855', 'tradable': True, 'totalBalance': 10000.0, 'accountPartlyOwned': False, 'totalBalanceDue': 0.0, 'ownCapital': 25000.43, 'buyingPower': 10001.0, 'totalProfitPercent': 14.44, 'name': 'Jonas ISK'}, {'accountType': 'Kapitalforsakring', 'interestRate': 0.0, 'depositable': True, 'performancePercent': 40.231653483118876, 'totalProfit': 12000.1, 'performance': 25001.82000000002, 'attorney': False, 'active': True, 'accountId': '9288043', 'tradable': True, 'totalBalance': 15002.13, 'accountPartlyOwned': False, 'totalBalanceDue': 0.0, 'ownCapital': 29999.83, 'buyingPower': 35000.13, 'totalProfitPercent': 12.77, 'name': 'Jonas KF'}], 'numberOfOrders': 0, 'numberOfDeals': 0, 'numberOfTransfers': 0, 'numberOfIntradayTransfers': 0, 'totalBuyingPower': 500.0, 'totalOwnCapital': 1000.0, 'totalPerformance': 23000.42, 'totalPerformancePercent': 31.88555687370771, 'totalBalance': 1500.0, 'totalbuyingPower': 500.0}
 
 def testGetTransactions():
     objUnderTest = AvanzaHandler(Log())
@@ -22,6 +22,25 @@ def testGetTransactions():
     retVal = objUnderTest.getTransactions(filterByDate='2021-11-11')
     assert retVal is not None
     assert len(retVal) == 3
+
+def testGetOverview():
+    objUnderTest = AvanzaHandler(Log())
+    objUnderTest.avanza = MagicMock()
+    objUnderTest.avanza.get_overview.return_value = getOverviewReply
+
+    retVal = objUnderTest.getOverview()
+
+    assert retVal is not None
+
+def testGetFunds():
+    objUnderTest = AvanzaHandler(Log())
+    objUnderTest.avanza = MagicMock()
+    objUnderTest.avanza.get_overview.return_value = getOverviewReply
+
+    retVal = objUnderTest.getCurrentFunds()
+
+    assert retVal is not None
+    assert retVal > 0
 
 def testplaceOrder():
     objUnderTest = AvanzaHandler(Log())
@@ -92,6 +111,8 @@ def testDeleteOrder():
 
 if __name__ == "__main__":
     testGetTransactions()
+    testGetOverview()
+    testGetFunds()
     testplaceOrder()
     testGenerateOrderValidDate()
     testGuessTickSize()

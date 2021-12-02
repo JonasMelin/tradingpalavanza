@@ -10,7 +10,7 @@ class TransactionType(enum.Enum):
 
 class AvanzaHandler:
 
-    allowedAcconts = ['Jonas KF', 'Jonas ISK']
+    allowedAcconts = ['9288043', '4397855']
 
     # ##############################################################################################################
     # ...
@@ -168,7 +168,7 @@ class AvanzaHandler:
                 raise RuntimeError(f"stock {tickerId} does not exist in any of my accounts")
 
             for position in positions:
-                if position['accountName'] in self.allowedAcconts:
+                if position['accountId'] in self.allowedAcconts:
                     retData['accountId'] = position['accountId']
                     retData['currentCount'] = position['volume']
                     retData['currentValueSEK'] = position['value']
@@ -277,10 +277,41 @@ class AvanzaHandler:
             if filterByDate is not None and 'verificationDate' in transaction and filterByDate != transaction['verificationDate']:
                 continue
 
-            if transaction['account']['name'] in self.allowedAcconts:
+            if transaction['account']['id'] in self.allowedAcconts:
                 finalResult.append(transaction)
 
         return finalResult
+
+    # ##############################################################################################################
+    # Tested!
+    # ##############################################################################################################
+    def getOverview(self):
+
+        finalResult = []
+        rawOverview = self.avanza.get_overview()
+
+        if rawOverview is None or 'accounts' not in rawOverview:
+            self.log.log(LogType.Trace, "got no overview from Avanza or malforrmatted...")
+            return []
+
+        for account in rawOverview['accounts']:
+            if account['accountId'] in self.allowedAcconts:
+                finalResult.append(account)
+
+        return finalResult
+
+    # ##############################################################################################################
+    # Tested!
+    # ##############################################################################################################
+    def getCurrentFunds(self):
+
+        accounts = self.getOverview()
+        totFunds = 0
+
+        for account in accounts:
+            totFunds += account['totalBalance']
+
+        return totFunds
 
     # ##############################################################################################################
     # ToDo: Implement
@@ -354,6 +385,8 @@ if __name__ == "__main__":
     print(tickerDetails)
 
     stocksBuyer.getTransactions()
+    stocksBuyer.getOverview()
+    stocksBuyer.getCurrentFunds()
 
 """
     id = stocksBuyer.tickerToId("CAPMAN.HE")
