@@ -12,21 +12,14 @@ def getFunds():
     return {"funds": mainBroker.getCurrentFunds()}
 
 @app.route("/tradingpalavanza/getyield", methods=['GET'])
-def getYieldByDate():
+def getYield():
     date = request.args.get("date")
-
-    if date is None:
-        return Response("Missing param date", status=400)
 
     return {"yields": mainBroker.getYieldByDate(date)}
 
-
 @app.route("/tradingpalavanza/gettax", methods=['GET'])
-def getTaxByDate():
+def getTax():
     date = request.args.get("date")
-
-    if date is None:
-        return Response("Missing param date", status=400)
 
     return {"taxes": mainBroker.getTaxByDate(date)}
 
