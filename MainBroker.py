@@ -14,7 +14,7 @@ MAX_SANITY_QUOTA_SELL_BUY = 1.12
 
 # will not go through with transaction if stock price was not updated last sec
 # Note that we get delayed prices 15 minutes. ToDo: Fix this depending upon market...
-MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 1200
+MAX_TIME_SINCE_STOCK_PRICE_UPDATED_SEC = 3600
 
 MAX_ALLOWED_TRANSACTION_SIZE_SEK = 3000
 
