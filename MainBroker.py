@@ -438,14 +438,14 @@ class MainBroker:
     # ##############################################################################################################
     def getYieldByDate(self, date: str):
         self.refreshAvanzaHandler()
-        return self.avanzaHandler.getYieldByDate(date)
+        return self.avanzaHandler.getYield(date)
 
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
     def getTaxByDate(self, date: str):
         self.refreshAvanzaHandler()
-        return self.avanzaHandler.getTaxByDate(date)
+        return self.avanzaHandler.getTax(date)
 
 
 # ##############################################################################################################
