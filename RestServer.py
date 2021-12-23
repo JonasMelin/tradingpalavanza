@@ -2,6 +2,9 @@
 from flask import Flask, request, Response
 import threading
 import MainBroker
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 mainBroker = MainBroker.MainBroker()
