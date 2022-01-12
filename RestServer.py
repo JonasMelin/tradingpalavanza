@@ -29,14 +29,11 @@ def getTax():
 
 @app.route("/tradingpalavanza/blockpurchases", methods=['GET'])
 def blockPurchases():
-    print("BLOCKING ALL PURCHASES")
     mainBroker.doBlockPurchases()
     return {}
 
 @app.route("/tradingpalavanza/killswitch", methods=['GET'])
 def killswitch():
-    print("KILLSWITCH PULLED: TERMINATING!")
-
     mainBroker.doTerminate()
 
     func = request.environ.get('werkzeug.server.shutdown')
