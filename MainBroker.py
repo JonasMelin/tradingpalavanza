@@ -36,6 +36,8 @@ class MainBroker:
     # ##############################################################################################################
     def __init__(self):
 
+        self.terminate = False
+        self.blockPurchases = False
         self.resetEventCounters()
         self.refreshAvanzaHandler()
 
@@ -238,7 +240,7 @@ class MainBroker:
 
         self.waitForConnectonToTradingPal()
 
-        while True:
+        while not self.terminate:
             if not self.marketsOpenDaytime():
                 log.log(LogType.Trace, "Markets closed...")
                 time.sleep(120)
@@ -251,7 +253,7 @@ class MainBroker:
 
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
-                if stocksToBuy is not None and len(stocksToBuy['list']) > 0:
+                if self.blockPurchases is False and stocksToBuy is not None and len(stocksToBuy['list']) > 0:
                     self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
                     time.sleep(120)
             except Exception as ex:
@@ -268,6 +270,9 @@ class MainBroker:
                 log.log(LogType.Trace, f"Exception during sell, {ex}")
 
             time.sleep(60)
+
+        print("Terminating!!!")
+        sys.exit()
 
     # ##############################################################################################################
     # ...
@@ -447,6 +452,17 @@ class MainBroker:
         self.refreshAvanzaHandler()
         return self.avanzaHandler.getTax(date)
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def doBlockPurchases(self):
+        self.blockPurchases = True
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def doTerminate(self):
+        self.terminate = True
 
 # ##############################################################################################################
 # ...

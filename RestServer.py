@@ -1,3 +1,4 @@
+import sys
 
 from flask import Flask, request, Response
 import threading
@@ -25,6 +26,25 @@ def getTax():
     date = request.args.get("date")
 
     return {"taxes": mainBroker.getTaxByDate(date)}
+
+@app.route("/tradingpalavanza/blockpurchases", methods=['GET'])
+def blockPurchases():
+    print("BLOCKING ALL PURCHASES")
+    mainBroker.doBlockPurchases()
+    return {}
+
+@app.route("/tradingpalavanza/killswitch", methods=['GET'])
+def killswitch():
+    print("KILLSWITCH PULLED: TERMINATING!")
+
+    mainBroker.doTerminate()
+
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is not None:
+        func()
+
+    sys.exit()
+
 
 if __name__ == "__main__":
 
