@@ -32,6 +32,11 @@ def blockPurchases():
     mainBroker.doBlockPurchases()
     return {}
 
+@app.route("/tradingpalavanza/unblockpurchases", methods=['GET'])
+def unblockPurchases():
+    mainBroker.doUnblockPurchases()
+    return {}
+
 @app.route("/tradingpalavanza/killswitch", methods=['GET'])
 def killswitch():
     mainBroker.doTerminate()
