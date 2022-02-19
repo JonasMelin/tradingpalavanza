@@ -2,7 +2,7 @@ import datetime, pytz, os, json, enum
 from avanza import Avanza, OrderType
 from Logger import LogType, Log
 
-passwordPaths = ["./passwords.json", "/passwords/passwords.json"]
+passwordPaths = ["./passwords.json", "/passwords/passwords.json", "/home/jonas/Documents/tradingpal/tradingpalavanza/passwords.json"]
 
 class TransactionType(enum.Enum):
    Buy = 1
