@@ -1,6 +1,6 @@
 FROM python:3.7-slim
 
-RUN pip install requests pytz avanza-api Flask
+RUN pip install requests==2.27.1 pytz==2021.3 avanza-api==3.0.1 Flask==2.0.3
 RUN pip list
 
 ADD AvanzaHandler.py MainBroker.py Logger.py RestServer.py /
