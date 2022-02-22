@@ -248,6 +248,7 @@ class AvanzaHandler:
                 "status": "SUCCESS"
             }
 
+        # Returns: {'orderRequestStatus': 'SUCCESS', 'message': '', 'orderId': '420807539'}
         result = self.avanza.place_order(
             account_id=accountId,
             order_book_id=tickerId,

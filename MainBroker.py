@@ -127,7 +127,7 @@ class MainBroker:
 
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, transactionType, price, volume)
 
-        if retVal['status'] != "SUCCESS":
+        if retVal is None or 'orderRequestStatus' not in retVal or retVal['orderRequestStatus'] != "SUCCESS":
             log.log(LogType.Audit, f"Could not place Avanza order: {retVal}, {infoString}")
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
             raise RuntimeError()
