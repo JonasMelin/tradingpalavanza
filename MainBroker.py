@@ -127,14 +127,15 @@ class MainBroker:
 
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, transactionType, price, volume)
 
+        if "outOfFunds" in retVal and retVal["outOfFunds"] is True:
+            print("We ran out of funds. Blocking all purchases!")
+            self.blockPurchases = True
+            raise RuntimeError()
+
         if retVal is None or 'orderRequestStatus' not in retVal or retVal['orderRequestStatus'] != "SUCCESS":
             log.log(LogType.Audit, f"Could not place Avanza order: {retVal}, {infoString}")
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
             raise RuntimeError()
-
-        if "outOfFunds" in retVal and retVal["outOfFunds"] is True:
-            print("We ran out of funds. Blocking all purchases!")
-            self.blockPurchases = True
 
         for a in range(WAIT_SEC_FOR_COMPLETION):
             avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
