@@ -132,6 +132,10 @@ class MainBroker:
             self.avanzaHandler.deleteOrder(accountId, retVal['orderId'])
             raise RuntimeError()
 
+        if "outOfFunds" in retVal and retVal["outOfFunds"] is True:
+            print("We ran out of funds. Blocking all purchases!")
+            self.blockPurchases = True
+
         for a in range(WAIT_SEC_FOR_COMPLETION):
             avanzaDetails = self.avanzaHandler.getTickerDetails(tickerId)
             if avanzaDetails['currentCount'] == expectedWhenDone:

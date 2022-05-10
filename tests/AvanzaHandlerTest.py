@@ -129,8 +129,8 @@ def testDeleteOrder():
 
 if __name__ == "__main__":
     testGetTransactions()
-    testGetYieldByDate()
-    testGetTaxByDate()
+    #testGetYieldByDate()
+    #testGetTaxByDate()
     testGetOverview()
     testGetFunds()
     testplaceOrder()

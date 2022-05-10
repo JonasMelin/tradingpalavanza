@@ -257,6 +257,11 @@ class AvanzaHandler:
             valid_until=datetime.date.fromisoformat(self.generateOrderValidDate()),
             volume = volume)
 
+        # Could not place Avanza order: {'orderRequestStatus': 'ERROR', 'message': 'Du har tyvärr inte tillräcklig täckning på din depå för att genomföra ordern. Kontakta vår kundservice för mer information.'}, TEO: tickerId: 347455, transaction: TransactionType.Buy, accountId 9288043, price: 5.05, volume 40, expectedWhenDone: 123, countAtStart: 83
+        if result is not None and 'message' in result and "Du har tyvärr inte tillräcklig täckning" in result['message']:
+            print("Out of funds...")
+            result["outOfFunds"] = True
+
         return result
 
     # ##############################################################################################################
