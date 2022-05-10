@@ -469,6 +469,7 @@ class MainBroker:
     # ##############################################################################################################
     def doUnblockPurchases(self):
         log.log(LogType.Trace, "UN-BLOCKING ALL PURCHASES!")
+        self.resetEventCounters()
         self.blockPurchases = False
 
     # ##############################################################################################################
