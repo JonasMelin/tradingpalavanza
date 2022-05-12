@@ -38,6 +38,7 @@ class MainBroker:
 
         self.terminate = False
         self.blockPurchases = False
+        self.blockTransactions = False
         self.resetEventCounters()
         self.refreshAvanzaHandler()
 
@@ -127,9 +128,14 @@ class MainBroker:
 
         retVal = self.avanzaHandler.placeOrder(yahooTicker, accountId, tickerId, transactionType, price, volume)
 
-        if "outOfFunds" in retVal and retVal["outOfFunds"] is True:
-            print("We ran out of funds. Blocking all purchases!")
-            self.blockPurchases = True
+        if "blockPurchase" in retVal and retVal["blockPurchase"] is True:
+            print("Blocking all purchases due to message from Avanza!")
+            self.doBlockPurchases()
+            raise RuntimeError()
+
+        if "blockTransactions" in retVal and retVal["blockTransactions"] is True:
+            print("Blocking all transactions due to message from Avanza!")
+            self.blockTransactions = True
             raise RuntimeError()
 
         if retVal is None or 'orderRequestStatus' not in retVal or retVal['orderRequestStatus'] != "SUCCESS":
@@ -258,7 +264,7 @@ class MainBroker:
 
             try:
                 stocksToBuy = self.fetchTickers(BUY_PATH)
-                if self.blockPurchases is False and stocksToBuy is not None and len(stocksToBuy['list']) > 0:
+                if self.blockTransactions is False and self.blockPurchases is False and stocksToBuy is not None and len(stocksToBuy['list']) > 0:
                     self.doStocksTransaction(stocksToBuy['list'], TransactionType.Buy)
                     time.sleep(120)
             except Exception as ex:
@@ -267,7 +273,7 @@ class MainBroker:
 
             try:
                 stocksToSell = self.fetchTickers(SELL_PATH)
-                if stocksToSell is not None and len(stocksToSell['list']) > 0:
+                if self.blockTransactions is False and stocksToSell is not None and len(stocksToSell['list']) > 0:
                     self.doStocksTransaction(stocksToSell['list'], TransactionType.Sell)
                     time.sleep(120)
             except Exception as ex:
@@ -471,6 +477,7 @@ class MainBroker:
         log.log(LogType.Trace, "UN-BLOCKING ALL PURCHASES!")
         self.resetEventCounters()
         self.blockPurchases = False
+        self.blockTransactions = False
 
     # ##############################################################################################################
     # ...
