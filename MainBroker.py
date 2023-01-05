@@ -252,6 +252,11 @@ class MainBroker:
         self.waitForConnectonToTradingPal()
 
         while not self.terminate:
+
+            time.sleep(60)
+            print("Trading disabled waiting for code fix after new domain model from avanza api")
+            continue
+
             if not self.marketsOpenDaytime():
                 log.log(LogType.Trace, "Markets closed...")
                 time.sleep(120)
